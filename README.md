@@ -125,20 +125,42 @@ tldr_offline(FALSE)
 # List all available voices
 tldr_list_voices()
 
-# Try different voices
+# Try the original voices
 tldr("mean", voice = "enthusiastic_explorer")  # Excited and energetic
 tldr("sd", voice = "cynical_detective")        # Skeptical and direct
 tldr("median", voice = "wise_mentor")          # Thoughtful and patient
 tldr("ggplot", voice = "eccentric_scientist")  # Quirky and unpredictable
 
+# Try the zany voices
+tldr("mean", voice = "conspiracy_theorist")    # Paranoid but accurate
+tldr("sd", voice = "exaggerator")              # Dramatically overstates everything
+tldr("var", voice = "reluctant_helper")        # Comically put-upon
+tldr("sum", voice = "time_traveler")           # From the future
+tldr("matrix", voice = "theatrical_villain")   # Dramatically evil
+
 # Set a default voice for all responses
 tldr_config(character_voice = "wise_mentor")
 
 # Test a voice with a standard function
-tldr_test_voice("eccentric_scientist")
+tldr_test_voice("theatrical_villain")
 ```
 
 Character voices transform the standard help text with personality traits while preserving all the important information. They modify section headings, add character-specific phrases, and adjust the tone of the response.
+
+### Available Character Voices
+
+| Voice Name | Description |
+|------------|-------------|
+| `none` | Plain responses with no personality |
+| `enthusiastic_explorer` | Excited, curious, and eager to share discoveries |
+| `cynical_detective` | Skeptical, direct, and cuts through the nonsense |
+| `wise_mentor` | Thoughtful, patient, and shares wisdom with deep understanding |
+| `eccentric_scientist` | Brilliantly chaotic, with quirky insights and unpredictable tangents |
+| `conspiracy_theorist` | Provides accurate technical information but constantly relates it to far-fetched conspiracies |
+| `exaggerator` | Dramatically overstates the importance and impact of every solution |
+| `reluctant_helper` | Acts comically put-upon about having to provide assistance |
+| `time_traveler` | Claims to be from the future and frames all solutions as "ancient techniques" |
+| `theatrical_villain` | Presents solutions with dramatic flair as if revealing an evil master plan |
 
 ## License
 
