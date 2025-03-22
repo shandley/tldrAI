@@ -141,9 +141,9 @@ tldr <- function(func_name, verbose = NULL, examples = NULL, refresh = FALSE,
   # Debug information if debug mode is enabled
   if (get_config("debug_mode", default = FALSE)) {
     # Create a clean prompt with function name for debug output
-    debug_prompt <- gsub("\\{\\{FUNCTION_NAME\\}\\}", func_name, prompt, fixed = TRUE)
-    debug_prompt <- gsub("\\{\\{FUNCTION_SIGNATURE\\}\\}", func_metadata$signature, debug_prompt, fixed = TRUE)
-    debug_prompt <- gsub("\\{\\{PACKAGE_NAME\\}\\}", func_metadata$package, debug_prompt, fixed = TRUE)
+    debug_prompt <- gsub("{{FUNCTION_NAME}}", func_name, prompt, fixed = TRUE)
+    debug_prompt <- gsub("{{FUNCTION_SIGNATURE}}", func_metadata$signature, debug_prompt, fixed = TRUE)
+    debug_prompt <- gsub("{{PACKAGE_NAME}}", func_metadata$package, debug_prompt, fixed = TRUE)
     
     message("DEBUG: Generated prompt:")
     message(debug_prompt)

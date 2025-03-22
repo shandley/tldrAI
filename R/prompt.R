@@ -12,31 +12,39 @@ build_prompt <- function(func_name, func_metadata, verbose, examples) {
   template <- get_prompt_template()
   
   # Replace placeholders with actual values
-  template <- gsub("\\{\\{FUNCTION_NAME\\}\\}", func_name, template, fixed = TRUE)
-  template <- gsub("\\{\\{PACKAGE_NAME\\}\\}", func_metadata$package, template, fixed = TRUE)
-  template <- gsub("\\{\\{FUNCTION_SIGNATURE\\}\\}", func_metadata$signature, template, fixed = TRUE)
-  template <- gsub("\\{\\{FUNCTION_DESCRIPTION\\}\\}", func_metadata$description, template, fixed = TRUE)
+  template <- gsub("{{FUNCTION_NAME}}", func_name, template, fixed = TRUE)
+  template <- gsub("{{PACKAGE_NAME}}", func_metadata$package, template, fixed = TRUE)
+  template <- gsub("{{FUNCTION_SIGNATURE}}", func_metadata$signature, template, fixed = TRUE)
+  
+  # Handle description with fallback
+  description_str <- "No description available"
+  if (!is.null(func_metadata$description) && func_metadata$description != "No description available") {
+    description_str <- func_metadata$description
+  }
+  template <- gsub("{{FUNCTION_DESCRIPTION}}", description_str, template, fixed = TRUE)
   
   # Handle argument list
   args_str <- "None specified"
   if (!is.null(func_metadata$args) && length(func_metadata$args) > 0) {
     args_str <- paste(func_metadata$args, collapse = ", ")
   }
-  template <- gsub("\\{\\{FUNCTION_ARGS\\}\\}", args_str, template, fixed = TRUE)
+  template <- gsub("{{FUNCTION_ARGS}}", args_str, template, fixed = TRUE)
   
   # Handle function body/implementation (if available)
   body_str <- "Not available"
   if (!is.null(func_metadata$body)) {
     body_str <- func_metadata$body
+  } else if (!is.null(func_metadata$body_summary)) {
+    body_str <- func_metadata$body_summary
   }
-  template <- gsub("\\{\\{FUNCTION_BODY\\}\\}", body_str, template, fixed = TRUE)
+  template <- gsub("{{FUNCTION_BODY}}", body_str, template, fixed = TRUE)
   
   # Handle examples count
-  template <- gsub("\\{\\{EXAMPLES_REQUESTED\\}\\}", as.character(examples), template, fixed = TRUE)
+  template <- gsub("{{EXAMPLES_REQUESTED}}", as.character(examples), template, fixed = TRUE)
   
   # Handle verbose flag
   verbose_str <- ifelse(verbose, "YES", "NO")
-  template <- gsub("\\{\\{VERBOSE\\}\\}", verbose_str, template, fixed = TRUE)
+  template <- gsub("{{VERBOSE}}", verbose_str, template, fixed = TRUE)
   
   template
 }
