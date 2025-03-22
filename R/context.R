@@ -344,6 +344,7 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
     generate_dplyr_example = function(func_name, df_name, df_info) {
       # Get column names
       col_names <- df_info$column_names
+      col_types <- df_info$column_types
       
       if (length(col_names) == 0) {
         return(sprintf("# Using your data frame '%s'\n%s(%s)", df_name, func_name, df_name))
@@ -353,6 +354,17 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
       if (func_name == "filter") {
         # Select a column for filtering
         col <- col_names[1]
+        # If we have column types, use appropriate filtering condition based on column type
+        if (!is.null(col_types) && length(col_types) > 0) {
+          type <- col_types[col]
+          if (type %in% c("character", "factor")) {
+            return(sprintf("# Filter rows in your '%s' data frame\n%s |> %s(!is.na(%s))", 
+                          df_name, df_name, func_name, col))
+          } else if (type %in% c("Date", "POSIXct", "POSIXlt")) {
+            return(sprintf("# Filter rows in your '%s' data frame by date\n%s |> %s(%s > as.Date('2023-01-01'))", 
+                          df_name, df_name, func_name, col))
+          }
+        }
         return(sprintf("# Filter rows in your '%s' data frame\n%s |> %s(%s > mean(%s, na.rm = TRUE))", 
                       df_name, df_name, func_name, col, col))
       }
@@ -367,6 +379,19 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
       # For mutate
       if (func_name == "mutate") {
         if (length(col_names) >= 2) {
+          # Check if column types are available and both columns are numeric
+          if (!is.null(col_types) && length(col_types) >= 2) {
+            type1 <- col_types[col_names[1]]
+            type2 <- col_types[col_names[2]]
+            
+            if (type1 %in% c("character", "factor") && type2 %in% c("character", "factor")) {
+              return(sprintf("# Add a new column combining text from your '%s' data frame\n%s |> %s(combined = paste(%s, %s, sep = ' - '))", 
+                            df_name, df_name, func_name, col_names[1], col_names[2]))
+            } else if (type1 %in% c("Date", "POSIXct", "POSIXlt") || type2 %in% c("Date", "POSIXct", "POSIXlt")) {
+              return(sprintf("# Add a date-related column to your '%s' data frame\n%s |> %s(year = lubridate::year(%s))", 
+                            df_name, df_name, func_name, col_names[1]))
+            }
+          }
           return(sprintf("# Add a new column to your '%s' data frame\n%s |> %s(new_var = %s + %s)", 
                         df_name, df_name, func_name, col_names[1], col_names[2]))
         } else {
@@ -382,10 +407,37 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
             return(sprintf("# Group your '%s' data frame by '%s'\n%s |> %s(%s)", 
                           df_name, col_names[1], df_name, func_name, col_names[1]))
           } else { # summarise
+            # If we have column types, use appropriate summarize function based on column type
+            if (!is.null(col_types) && length(col_types) >= 2) {
+              type2 <- col_types[col_names[2]]
+              if (type2 %in% c("character", "factor")) {
+                return(sprintf("# Summarize your grouped '%s' data frame\n%s |> group_by(%s) |> %s(count = n(), unique_values = n_distinct(%s))", 
+                              df_name, df_name, col_names[1], func_name, col_names[2]))
+              }
+            }
             return(sprintf("# Summarize your grouped '%s' data frame\n%s |> group_by(%s) |> %s(avg_%s = mean(%s, na.rm = TRUE))", 
                           df_name, df_name, col_names[1], func_name, col_names[2], col_names[2]))
           }
         }
+      }
+      
+      # For arrange
+      if (func_name == "arrange") {
+        return(sprintf("# Sort your '%s' data frame by '%s'\n%s |> %s(%s)", 
+                      df_name, col_names[1], df_name, func_name, col_names[1]))
+      }
+      
+      # For distinct
+      if (func_name == "distinct") {
+        col_subset <- paste(head(col_names, min(2, length(col_names))), collapse = ", ")
+        return(sprintf("# Get unique combinations in your '%s' data frame\n%s |> %s(%s)", 
+                      df_name, df_name, func_name, col_subset))
+      }
+      
+      # For join functions
+      if (func_name %in% c("left_join", "right_join", "inner_join", "full_join")) {
+        return(sprintf("# Join your '%s' data frame with another data frame\n%s |> %s(another_df, by = '%s')", 
+                      df_name, df_name, func_name, col_names[1]))
       }
       
       # Generic fallback
@@ -398,17 +450,59 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
     #' @param df_info Information about the data frame
     #' @return Example string
     generate_ggplot_example = function(func_name, df_name, df_info) {
-      # Get column names
+      # Get column names and types
       col_names <- df_info$column_names
+      col_types <- df_info$column_types
       
       if (length(col_names) == 0) {
         return(sprintf("# Create a plot using your '%s' data frame\nggplot(%s, aes(x = column1)) + geom_histogram()", 
                       df_name, df_name))
       }
       
+      # Find numeric and categorical columns if column types are available
+      numeric_cols <- character(0)
+      cat_cols <- character(0)
+      date_cols <- character(0)
+      
+      if (!is.null(col_types) && length(col_types) > 0) {
+        for (i in seq_along(col_types)) {
+          col <- names(col_types)[i]
+          type <- col_types[i]
+          
+          if (type %in% c("numeric", "integer", "double")) {
+            numeric_cols <- c(numeric_cols, col)
+          } else if (type %in% c("character", "factor")) {
+            cat_cols <- c(cat_cols, col)
+          } else if (type %in% c("Date", "POSIXct", "POSIXlt")) {
+            date_cols <- c(date_cols, col)
+          }
+        }
+      }
+      
       # For ggplot base function
       if (func_name == "ggplot") {
-        if (length(col_names) >= 2) {
+        # If we have both numeric and categorical columns, create a boxplot
+        if (length(numeric_cols) > 0 && length(cat_cols) > 0) {
+          return(sprintf("# Create a boxplot using your '%s' data frame\nggplot(%s, aes(x = %s, y = %s)) + geom_boxplot()", 
+                        df_name, df_name, cat_cols[1], numeric_cols[1]))
+        } 
+        # If we have date and numeric columns, create a time series plot
+        else if (length(date_cols) > 0 && length(numeric_cols) > 0) {
+          return(sprintf("# Create a time series plot using your '%s' data frame\nggplot(%s, aes(x = %s, y = %s)) + geom_line()", 
+                        df_name, df_name, date_cols[1], numeric_cols[1]))
+        }
+        # If we have two numeric columns, create a scatter plot
+        else if (length(numeric_cols) >= 2) {
+          return(sprintf("# Create a scatter plot using your '%s' data frame\nggplot(%s, aes(x = %s, y = %s)) + geom_point()", 
+                        df_name, df_name, numeric_cols[1], numeric_cols[2]))
+        } 
+        # If we have one numeric column, create a histogram
+        else if (length(numeric_cols) == 1) {
+          return(sprintf("# Create a histogram using your '%s' data frame\nggplot(%s, aes(x = %s)) + geom_histogram(bins = 30)", 
+                        df_name, df_name, numeric_cols[1]))
+        }
+        # Fallback using first two columns or just first column
+        else if (length(col_names) >= 2) {
           return(sprintf("# Create a scatter plot using your '%s' data frame\nggplot(%s, aes(x = %s, y = %s)) + geom_point()", 
                         df_name, df_name, col_names[1], col_names[2]))
         } else {
@@ -417,32 +511,76 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
         }
       }
       
-      # For geom_point
+      # For geom_point (scatter plot)
       if (func_name == "geom_point") {
-        if (length(col_names) >= 2) {
+        # If we have two numeric columns, use them
+        if (length(numeric_cols) >= 2) {
+          return(sprintf("# Create a scatter plot using your '%s' data frame\nggplot(%s, aes(x = %s, y = %s)) + %s(alpha = 0.7) + labs(title = 'Scatter Plot')", 
+                        df_name, df_name, numeric_cols[1], numeric_cols[2], func_name))
+        } else if (length(col_names) >= 2) {
           return(sprintf("# Create a scatter plot using your '%s' data frame\nggplot(%s, aes(x = %s, y = %s)) + %s()", 
                         df_name, df_name, col_names[1], col_names[2], func_name))
         }
       }
       
-      # For geom_line
+      # For geom_line (line plots - good for time series)
       if (func_name == "geom_line") {
-        if (length(col_names) >= 2) {
+        # If we have date and numeric columns, create a time series
+        if (length(date_cols) > 0 && length(numeric_cols) > 0) {
+          return(sprintf("# Create a time series plot using your '%s' data frame\nggplot(%s, aes(x = %s, y = %s)) + %s() + labs(title = 'Time Series Plot')", 
+                        df_name, df_name, date_cols[1], numeric_cols[1], func_name))
+        } else if (length(col_names) >= 2) {
           return(sprintf("# Create a line plot using your '%s' data frame\nggplot(%s, aes(x = %s, y = %s)) + %s()", 
                         df_name, df_name, col_names[1], col_names[2], func_name))
         }
       }
       
-      # For geom_bar
+      # For geom_bar (bar charts - good for categorical variables)
       if (func_name == "geom_bar") {
-        return(sprintf("# Create a bar plot using your '%s' data frame\nggplot(%s, aes(x = %s)) + %s()", 
-                      df_name, df_name, col_names[1], func_name))
+        # If we have categorical columns, use one
+        if (length(cat_cols) > 0) {
+          return(sprintf("# Create a bar plot using your '%s' data frame\nggplot(%s, aes(x = %s)) + %s() + labs(title = 'Bar Chart')", 
+                        df_name, df_name, cat_cols[1], func_name))
+        } else {
+          return(sprintf("# Create a bar plot using your '%s' data frame\nggplot(%s, aes(x = %s)) + %s()", 
+                        df_name, df_name, col_names[1], func_name))
+        }
       }
       
-      # For geom_histogram
+      # For geom_boxplot (box plots - good for categorical vs numeric)
+      if (func_name == "geom_boxplot") {
+        # If we have both numeric and categorical columns
+        if (length(numeric_cols) > 0 && length(cat_cols) > 0) {
+          return(sprintf("# Create a boxplot using your '%s' data frame\nggplot(%s, aes(x = %s, y = %s)) + %s() + labs(title = 'Box Plot')", 
+                        df_name, df_name, cat_cols[1], numeric_cols[1], func_name))
+        } else if (length(col_names) >= 2) {
+          return(sprintf("# Create a boxplot using your '%s' data frame\nggplot(%s, aes(x = %s, y = %s)) + %s()", 
+                        df_name, df_name, col_names[1], col_names[2], func_name))
+        }
+      }
+      
+      # For geom_histogram (histograms - good for distribution of numeric variables)
       if (func_name == "geom_histogram") {
-        return(sprintf("# Create a histogram using your '%s' data frame\nggplot(%s, aes(x = %s)) + %s(bins = 30)", 
-                      df_name, df_name, col_names[1], func_name))
+        # If we have numeric columns, use one
+        if (length(numeric_cols) > 0) {
+          return(sprintf("# Create a histogram using your '%s' data frame\nggplot(%s, aes(x = %s)) + %s(bins = 30) + labs(title = 'Histogram')", 
+                        df_name, df_name, numeric_cols[1], func_name))
+        } else {
+          return(sprintf("# Create a histogram using your '%s' data frame\nggplot(%s, aes(x = %s)) + %s(bins = 30)", 
+                        df_name, df_name, col_names[1], func_name))
+        }
+      }
+      
+      # For geom_density (density plots - good for distribution of numeric variables)
+      if (func_name == "geom_density") {
+        # If we have numeric columns, use one
+        if (length(numeric_cols) > 0) {
+          return(sprintf("# Create a density plot using your '%s' data frame\nggplot(%s, aes(x = %s)) + %s(fill = 'blue', alpha = 0.3) + labs(title = 'Density Plot')", 
+                        df_name, df_name, numeric_cols[1], func_name))
+        } else {
+          return(sprintf("# Create a density plot using your '%s' data frame\nggplot(%s, aes(x = %s)) + %s()", 
+                        df_name, df_name, col_names[1], func_name))
+        }
       }
       
       # Generic fallback
