@@ -9,7 +9,8 @@ tldr(
   refresh = FALSE,
   provider = NULL,
   voice = NULL,
-  async = NULL
+  async = NULL,
+  context = NULL
 )
 }
 \arguments{
@@ -26,6 +27,8 @@ tldr(
 \item{voice}{Character string specifying the character voice to use (e.g., "enthusiastic_explorer")}
 
 \item{async}{Logical indicating whether to make the API call asynchronously}
+
+\item{context}{Logical indicating whether to use contextual awareness to personalize examples}
 }
 \value{
 Prints formatted help to the console (invisibly returns the raw response)
@@ -41,5 +44,6 @@ tldr("dplyr::filter", provider = "openai")
 tldr("median", voice = "enthusiastic_explorer")
 tldr("sd", voice = "cynical_detective")
 tldr("plot", async = TRUE)  # Make an asynchronous API call
+tldr("filter", context = TRUE)  # Use contextual awareness
 }
 }
