@@ -594,17 +594,57 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
     #' @param df_info Information about the data frame
     #' @return Example string
     generate_stats_example = function(func_name, df_name, df_info) {
-      # Get column names
+      # Get column names and types
       col_names <- df_info$column_names
+      col_types <- df_info$column_types
       
       if (length(col_names) == 0) {
         return(sprintf("# Calculate %s from your '%s' data frame\n%s(%s$column_name, na.rm = TRUE)", 
                       func_name, df_name, func_name, df_name))
       }
       
-      # Basic statistics on a column
+      # Find numeric columns if column types are available
+      numeric_cols <- character(0)
+      
+      if (!is.null(col_types) && length(col_types) > 0) {
+        for (i in seq_along(col_types)) {
+          col <- names(col_types)[i]
+          type <- col_types[i]
+          
+          if (type %in% c("numeric", "integer", "double")) {
+            numeric_cols <- c(numeric_cols, col)
+          }
+        }
+      }
+      
+      # Use a numeric column if available, otherwise use first column
+      target_col <- if (length(numeric_cols) > 0) numeric_cols[1] else col_names[1]
+      
+      # For different stat functions
+      if (func_name == "mean" || func_name == "median") {
+        return(sprintf("# Calculate %s of '%s' in your '%s' data frame\n%s(%s$%s, na.rm = TRUE)", 
+                      func_name, target_col, df_name, func_name, df_name, target_col))
+      } else if (func_name == "sd" || func_name == "var") {
+        return(sprintf("# Calculate %s (variability) of '%s' in your '%s' data frame\n%s(%s$%s, na.rm = TRUE)", 
+                      func_name, target_col, df_name, func_name, df_name, target_col))
+      } else if (func_name == "min" || func_name == "max") {
+        return(sprintf("# Find %s value of '%s' in your '%s' data frame\n%s(%s$%s, na.rm = TRUE)", 
+                      func_name, target_col, df_name, func_name, df_name, target_col))
+      } else if (func_name == "range") {
+        return(sprintf("# Find range of values for '%s' in your '%s' data frame\n%s(%s$%s, na.rm = TRUE)", 
+                      target_col, df_name, func_name, df_name, target_col))
+      } else if (func_name == "sum") {
+        return(sprintf("# Calculate sum of '%s' in your '%s' data frame\n%s(%s$%s, na.rm = TRUE)", 
+                      target_col, df_name, func_name, df_name, target_col))
+      } else if (func_name == "summary") {
+        # Summary is special as it works on entire data frames
+        return(sprintf("# Get summary statistics for your '%s' data frame\n%s(%s)", 
+                      df_name, func_name, df_name))
+      }
+      
+      # Generic fallback
       return(sprintf("# Calculate %s from your '%s' data frame\n%s(%s$%s, na.rm = TRUE)", 
-                    func_name, df_name, func_name, df_name, col_names[1]))
+                    func_name, df_name, func_name, df_name, target_col))
     },
     
     #' @description Generate example for statistical modeling functions
@@ -613,36 +653,129 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
     #' @param df_info Information about the data frame
     #' @return Example string
     generate_stats_model_example = function(func_name, df_name, df_info) {
-      # Get column names
+      # Get column names and types
       col_names <- df_info$column_names
+      col_types <- df_info$column_types
       
       if (length(col_names) < 2) {
         return(sprintf("# Fit a model to your '%s' data frame\n%s(y ~ x, data = %s)", 
                       df_name, func_name, df_name))
       }
       
+      # Find numeric and categorical columns if column types are available
+      numeric_cols <- character(0)
+      cat_cols <- character(0)
+      date_cols <- character(0)
+      logical_cols <- character(0)
+      
+      if (!is.null(col_types) && length(col_types) > 0) {
+        for (i in seq_along(col_types)) {
+          col <- names(col_types)[i]
+          type <- col_types[i]
+          
+          if (type %in% c("numeric", "integer", "double")) {
+            numeric_cols <- c(numeric_cols, col)
+          } else if (type %in% c("character", "factor")) {
+            cat_cols <- c(cat_cols, col)
+          } else if (type %in% c("Date", "POSIXct", "POSIXlt")) {
+            date_cols <- c(date_cols, col)
+          } else if (type == "logical") {
+            logical_cols <- c(logical_cols, col)
+          }
+        }
+      }
+      
       # For linear models
       if (func_name == "lm") {
-        return(sprintf("# Fit a linear model to your '%s' data frame\n%s(%s ~ %s, data = %s)", 
-                      df_name, func_name, col_names[2], col_names[1], df_name))
+        # If we have numeric predictor and outcome, create a regression
+        if (length(numeric_cols) >= 2) {
+          return(sprintf("# Fit a linear model to your '%s' data frame\n%s(%s ~ %s, data = %s)", 
+                        df_name, func_name, numeric_cols[1], numeric_cols[2], df_name))
+        } else if (length(numeric_cols) == 1 && length(cat_cols) >= 1) {
+          # Numeric outcome with categorical predictor - ANOVA-like model
+          return(sprintf("# Fit a linear model (ANOVA-like) to your '%s' data frame\n%s(%s ~ %s, data = %s)", 
+                        df_name, func_name, numeric_cols[1], cat_cols[1], df_name))
+        } else {
+          return(sprintf("# Fit a linear model to your '%s' data frame\n%s(%s ~ %s, data = %s)", 
+                        df_name, func_name, col_names[2], col_names[1], df_name))
+        }
       }
       
       # For generalized linear models
       if (func_name == "glm") {
-        return(sprintf("# Fit a logistic regression model to your '%s' data frame\n%s(%s ~ %s, data = %s, family = binomial())", 
-                      df_name, func_name, col_names[2], col_names[1], df_name))
+        # If we have a logical/binary outcome, use logistic regression
+        if (length(logical_cols) > 0 && length(numeric_cols) > 0) {
+          return(sprintf("# Fit a logistic regression model to your '%s' data frame\n%s(%s ~ %s, data = %s, family = binomial())", 
+                        df_name, func_name, logical_cols[1], numeric_cols[1], df_name))
+        } else if (length(numeric_cols) >= 2) {
+          return(sprintf("# Fit a regression model to your '%s' data frame\n%s(%s ~ %s, data = %s, family = gaussian())", 
+                        df_name, func_name, numeric_cols[1], numeric_cols[2], df_name))
+        } else if (length(cat_cols) > 0 && length(numeric_cols) > 0) {
+          return(sprintf("# Fit a model with categorical predictor to your '%s' data frame\n%s(%s ~ %s, data = %s, family = gaussian())", 
+                        df_name, func_name, numeric_cols[1], cat_cols[1], df_name))
+        } else {
+          return(sprintf("# Fit a logistic regression model to your '%s' data frame\n%s(%s ~ %s, data = %s, family = binomial())", 
+                        df_name, func_name, col_names[2], col_names[1], df_name))
+        }
       }
       
       # For t-tests
       if (func_name == "t.test") {
-        return(sprintf("# Perform a t-test on your '%s' data frame\n%s(%s$%s, %s$%s)", 
-                      df_name, func_name, df_name, col_names[1], df_name, col_names[2]))
+        if (length(numeric_cols) >= 2) {
+          return(sprintf("# Perform a t-test comparing two numeric variables in your '%s' data frame\n%s(%s$%s, %s$%s, paired = FALSE)", 
+                        df_name, func_name, df_name, numeric_cols[1], df_name, numeric_cols[2]))
+        } else if (length(numeric_cols) == 1 && length(cat_cols) >= 1) {
+          return(sprintf("# Perform a t-test comparing '%s' across groups in '%s'\n%s(%s ~ %s, data = %s)", 
+                        numeric_cols[1], cat_cols[1], func_name, numeric_cols[1], cat_cols[1], df_name))
+        } else {
+          return(sprintf("# Perform a t-test on your '%s' data frame\n%s(%s$%s, %s$%s)", 
+                        df_name, func_name, df_name, col_names[1], df_name, col_names[2]))
+        }
       }
       
       # For correlation tests
       if (func_name %in% c("cor", "cor.test")) {
-        return(sprintf("# Calculate correlation between columns in your '%s' data frame\n%s(%s$%s, %s$%s, use = 'complete.obs')", 
-                      df_name, func_name, df_name, col_names[1], df_name, col_names[2]))
+        if (length(numeric_cols) >= 2) {
+          if (func_name == "cor") {
+            # For cor(), we can use multiple columns
+            if (length(numeric_cols) > 2) {
+              num_cols_str <- paste(numeric_cols, collapse = ", ")
+              return(sprintf("# Calculate correlation matrix between numeric columns in your '%s' data frame\n%s(%s[, c(\"%s\")], use = 'complete.obs')", 
+                            df_name, func_name, df_name, paste(numeric_cols, collapse = "\", \"")))
+            }
+          }
+          return(sprintf("# Calculate correlation between '%s' and '%s' in your '%s' data frame\n%s(%s$%s, %s$%s, use = 'complete.obs'%s)", 
+                        numeric_cols[1], numeric_cols[2], df_name, func_name, df_name, numeric_cols[1], 
+                        df_name, numeric_cols[2], if(func_name == "cor.test") ", method = 'pearson'" else ""))
+        } else {
+          return(sprintf("# Calculate correlation between columns in your '%s' data frame\n%s(%s$%s, %s$%s, use = 'complete.obs')", 
+                        df_name, func_name, df_name, col_names[1], df_name, col_names[2]))
+        }
+      }
+      
+      # For ANOVA
+      if (func_name == "aov") {
+        if (length(numeric_cols) >= 1 && length(cat_cols) >= 1) {
+          return(sprintf("# Perform ANOVA on '%s' across groups in '%s'\n%s(%s ~ %s, data = %s)", 
+                        numeric_cols[1], cat_cols[1], func_name, numeric_cols[1], cat_cols[1], df_name))
+        } else {
+          return(sprintf("# Perform ANOVA on your '%s' data frame\n%s(%s ~ %s, data = %s)", 
+                        df_name, func_name, col_names[2], col_names[1], df_name))
+        }
+      }
+      
+      # For survival analysis
+      if (func_name %in% c("survfit", "coxph", "Surv")) {
+        if (func_name == "Surv") {
+          if (length(numeric_cols) >= 2) {
+            return(sprintf("# Create survival object from your '%s' data frame\n%s(%s$%s, %s$%s)", 
+                          df_name, func_name, df_name, numeric_cols[1], df_name, 
+                          if(length(logical_cols) > 0) logical_cols[1] else numeric_cols[2]))
+          }
+        } else {
+          return(sprintf("# Fit a survival model to your '%s' data frame\n%s(survival::Surv(time, status) ~ %s, data = %s)", 
+                        df_name, func_name, if(length(numeric_cols) > 0) numeric_cols[1] else col_names[1], df_name))
+        }
       }
       
       # Generic fallback
