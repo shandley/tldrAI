@@ -36,7 +36,7 @@ get_function_metadata <- function(func_name) {
   package <- find_package(func_name)
   
   # Get function signature
-  signature <- format_signature(func)
+  signature <- get_function_signature(func_name, func)
   
   # Get function description
   description <- get_function_description(func_name, package)
@@ -72,13 +72,14 @@ find_package <- function(func_name) {
   "unknown"
 }
 
-#' Format the function signature
+#' Get the function signature as a string
 #'
+#' @param func_name The name of the function
 #' @param func The function object
 #'
 #' @return Character string with the formatted signature
 #' @keywords internal
-format_signature <- function(func) {
+get_function_signature <- function(func_name, func) {
   # Get formals (arguments)
   args <- formals(func)
   
@@ -86,12 +87,31 @@ format_signature <- function(func) {
   arg_strings <- character(length(args))
   for (i in seq_along(args)) {
     arg_name <- names(args)[i]
-    arg_value <- args[[i]]
-    
-    if (is.symbol(arg_value) && arg_value == "") {
-      arg_strings[i] <- arg_name
+    if (i <= length(args)) {
+      # Get the argument value as a string safely
+      arg_value_str <- tryCatch({
+        arg_value <- args[[i]]
+        if (is.symbol(arg_value)) {
+          if (as.character(arg_value) == "") {
+            # Just the argument name for missing default values
+            ""
+          } else {
+            # Symbol with a value
+            paste0(" = ", as.character(arg_value))
+          }
+        } else {
+          # Non-symbol value
+          paste0(" = ", deparse(arg_value, width.cutoff = 500)[1])
+        }
+      }, error = function(e) {
+        "" # Return empty string on error
+      })
+      
+      # Combine name and value
+      arg_strings[i] <- paste0(arg_name, arg_value_str)
     } else {
-      arg_strings[i] <- paste0(arg_name, " = ", deparse(arg_value, width.cutoff = 500))
+      # Fallback for unexpected cases
+      arg_strings[i] <- arg_name
     }
   }
   

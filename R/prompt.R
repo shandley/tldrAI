@@ -12,12 +12,12 @@ build_prompt <- function(func_name, func_metadata, verbose, examples) {
   
   # Replace placeholders in template
   prompt <- template
-  prompt <- gsub("{{FUNCTION_NAME}}", func_name, prompt)
-  prompt <- gsub("{{FUNCTION_SIGNATURE}}", func_metadata$signature, prompt)
-  prompt <- gsub("{{FUNCTION_DESCRIPTION}}", func_metadata$description, prompt)
-  prompt <- gsub("{{PACKAGE_NAME}}", func_metadata$package, prompt)
-  prompt <- gsub("{{EXAMPLES_REQUESTED}}", as.character(examples), prompt)
-  prompt <- gsub("{{VERBOSE}}", ifelse(verbose, "YES", "NO"), prompt)
+  prompt <- gsub("\\{\\{FUNCTION_NAME\\}\\}", func_name, prompt, fixed = TRUE)
+  prompt <- gsub("\\{\\{FUNCTION_SIGNATURE\\}\\}", func_metadata$signature, prompt, fixed = TRUE)
+  prompt <- gsub("\\{\\{FUNCTION_DESCRIPTION\\}\\}", func_metadata$description, prompt, fixed = TRUE)
+  prompt <- gsub("\\{\\{PACKAGE_NAME\\}\\}", func_metadata$package, prompt, fixed = TRUE)
+  prompt <- gsub("\\{\\{EXAMPLES_REQUESTED\\}\\}", as.character(examples), prompt, fixed = TRUE)
+  prompt <- gsub("\\{\\{VERBOSE\\}\\}", ifelse(verbose, "YES", "NO"), prompt, fixed = TRUE)
   
   prompt
 }

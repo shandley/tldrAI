@@ -1,0 +1,58 @@
+# R project and session files
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+
+# Package build files
+*.tar.gz
+*.tgz
+
+# System files
+.DS_Store
+Thumbs.db
+.directory
+
+# Generated documentation
+/doc/
+/Meta/
+/docs/
+
+# Vignette build files
+inst/doc
+vignettes/*.html
+vignettes/*.pdf
+
+# Test artifacts
+.test/
+
+# User environment and configuration files
+.env
+.Renviron
+.Rprofile
+
+# Cache directories
+tldrAI-cache/
+/cache/
+
+# Dependency directory
+/packrat/
+/renv/
+/renv.lock
+
+# CRAN submission files
+CRAN-SUBMISSION
+CRAN-RELEASE
+
+# Compilation artifacts
+*.o
+*.so
+*.dll
+
+# IDE files
+.idea/
+.vscode/
+
+# Other
+.httr-oauth

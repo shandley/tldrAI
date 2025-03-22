@@ -33,14 +33,20 @@ print_tldr_response <- function(response, func_name, verbose, examples) {
 #' @return Character string with the content from the code block
 #' @keywords internal
 extract_code_block <- function(response) {
+  # Convert newlines to a temporary marker
+  modified_response <- gsub("\n", "@@NEWLINE@@", response)
+  
   # Extract text between triple backticks
   pattern <- "```(.*?)```"
-  matches <- regmatches(response, gregexpr(pattern, response, dotall = TRUE))[[1]]
+  matches <- regmatches(modified_response, gregexpr(pattern, modified_response))[[1]]
   
   if (length(matches) == 0) {
     # If no code blocks found, return the whole response
     return(response)
   }
+  
+  # Convert the temporary marker back to newlines
+  matches <- gsub("@@NEWLINE@@", "\n", matches)
   
   # Remove the backticks and any language specification
   content <- gsub("```[rR]?\\s*|```", "", matches[1])
