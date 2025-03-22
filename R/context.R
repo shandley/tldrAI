@@ -319,15 +319,39 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
       for (df_name in top_dfs) {
         df_info <- self$context_data$data_frames[[df_name]]
         
-        if (func_package == "dplyr" && func_name %in% c("filter", "select", "mutate", "summarise", "group_by")) {
+        # Tidyverse/dplyr functions
+        if (func_package == "dplyr" && func_name %in% c("filter", "select", "mutate", "summarise", "group_by", 
+                                                     "arrange", "distinct", "left_join", "right_join", "inner_join", "full_join")) {
           examples <- c(examples, self$generate_dplyr_example(func_name, df_name, df_info))
-        } else if (func_package == "ggplot2" && func_name %in% c("ggplot", "geom_point", "geom_line", "geom_bar", "geom_histogram")) {
+        } 
+        # tidyr functions
+        else if (func_package == "tidyr" && func_name %in% c("pivot_longer", "pivot_wider", "separate", "unite", "drop_na", "fill")) {
+          examples <- c(examples, self$generate_tidyr_example(func_name, df_name, df_info))
+        } 
+        # ggplot2 functions
+        else if (func_package == "ggplot2" && func_name %in% c("ggplot", "geom_point", "geom_line", "geom_bar", 
+                                                           "geom_histogram", "geom_boxplot", "geom_density", "facet_wrap", "facet_grid", "theme_minimal")) {
           examples <- c(examples, self$generate_ggplot_example(func_name, df_name, df_info))
-        } else if (func_package == "base" && func_name %in% c("mean", "median", "sum", "min", "max", "sd", "var")) {
+        } 
+        # Basic statistics functions
+        else if ((func_package == "base" || func_package == "stats") && 
+                func_name %in% c("mean", "median", "sum", "min", "max", "sd", "var", "quantile", "range", "summary", "IQR")) {
           examples <- c(examples, self$generate_stats_example(func_name, df_name, df_info))
-        } else if (func_package == "stats" && func_name %in% c("lm", "glm", "t.test", "cor", "cor.test", "anova")) {
+        } 
+        # Statistical modeling functions
+        else if (func_package == "stats" && func_name %in% c("lm", "glm", "t.test", "cor", "cor.test", "aov", "anova", "TukeyHSD")) {
           examples <- c(examples, self$generate_stats_model_example(func_name, df_name, df_info))
-        } else {
+        }
+        # purrr functions
+        else if (func_package == "purrr" && func_name %in% c("map", "map_dbl", "map_chr", "map_int", "map_lgl", "map_df", "reduce", "keep", "discard")) {
+          examples <- c(examples, self$generate_purrr_example(func_name, df_name, df_info))
+        }
+        # Survival analysis
+        else if (func_package == "survival" && func_name %in% c("Surv", "survfit", "coxph")) {
+          examples <- c(examples, self$generate_survival_example(func_name, df_name, df_info))
+        }
+        # Generic examples for any other function
+        else {
           # Generic example
           examples <- c(examples, sprintf("# Using your data frame '%s'\n%s(%s)", df_name, func_name, df_name))
         }
@@ -645,6 +669,256 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
       # Generic fallback
       return(sprintf("# Calculate %s from your '%s' data frame\n%s(%s$%s, na.rm = TRUE)", 
                     func_name, df_name, func_name, df_name, target_col))
+    },
+    
+    #' @description Generate example for statistical modeling functions
+    #' @param func_name Name of the function
+    #' @param df_name Name of the data frame
+    #' @param df_info Information about the data frame
+    #' @return Example string
+    #' @description Generate example for tidyr functions
+    #' @param func_name Name of the function
+    #' @param df_name Name of the data frame
+    #' @param df_info Information about the data frame
+    #' @return Example string
+    generate_tidyr_example = function(func_name, df_name, df_info) {
+      # Get column names and types
+      col_names <- df_info$column_names
+      col_types <- df_info$column_types
+      
+      if (length(col_names) == 0) {
+        return(sprintf("# Using your data frame '%s'\n%s(%s)", df_name, func_name, df_name))
+      }
+      
+      # For pivot_longer (wide to long format)
+      if (func_name == "pivot_longer") {
+        # Select a subset of columns to pivot
+        col_subset <- head(col_names, min(3, length(col_names)))
+        if (length(col_subset) <= 1) {
+          col_subset <- col_names  # Use all columns if there are very few
+        }
+        
+        cols_str <- paste(col_subset, collapse = "', '")
+        return(sprintf("# Convert your '%s' data frame from wide to long format\n%s |> %s(cols = c('%s'), names_to = 'variable', values_to = 'value')", 
+                      df_name, df_name, func_name, cols_str))
+      }
+      
+      # For pivot_wider (long to wide format)
+      if (func_name == "pivot_wider") {
+        if (length(col_names) >= 2) {
+          return(sprintf("# Convert your '%s' data frame from long to wide format\n%s |> %s(names_from = %s, values_from = %s)", 
+                        df_name, df_name, func_name, col_names[1], col_names[2]))
+        }
+      }
+      
+      # For separate (split a column into multiple columns)
+      if (func_name == "separate") {
+        if (length(col_names) > 0) {
+          # Try to find a character column if types are available
+          target_col <- col_names[1]
+          if (!is.null(col_types) && length(col_types) > 0) {
+            char_cols <- names(col_types)[col_types %in% c("character", "factor")]
+            if (length(char_cols) > 0) {
+              target_col <- char_cols[1]
+            }
+          }
+          
+          return(sprintf("# Split column '%s' in your '%s' data frame\n%s |> %s(%s, into = c('part1', 'part2'), sep = '_')", 
+                        target_col, df_name, df_name, func_name, target_col))
+        }
+      }
+      
+      # For unite (combine multiple columns into one)
+      if (func_name == "unite") {
+        if (length(col_names) >= 2) {
+          return(sprintf("# Combine columns '%s' and '%s' in your '%s' data frame\n%s |> %s('combined', %s, %s, sep = '_')", 
+                        col_names[1], col_names[2], df_name, df_name, func_name, col_names[1], col_names[2]))
+        }
+      }
+      
+      # For drop_na (remove rows with missing values)
+      if (func_name == "drop_na") {
+        if (length(col_names) > 0) {
+          return(sprintf("# Remove rows with NA values in your '%s' data frame\n%s |> %s(%s)", 
+                        df_name, df_name, func_name, col_names[1]))
+        } else {
+          return(sprintf("# Remove rows with any NA values in your '%s' data frame\n%s |> %s()", 
+                        df_name, df_name, func_name))
+        }
+      }
+      
+      # For fill (fill in missing values)
+      if (func_name == "fill") {
+        if (length(col_names) > 0) {
+          return(sprintf("# Fill missing values in your '%s' data frame\n%s |> %s(%s, .direction = 'down')", 
+                        df_name, df_name, func_name, col_names[1]))
+        }
+      }
+      
+      # Generic fallback
+      sprintf("# Apply %s to your '%s' data frame\n%s(%s)", func_name, df_name, func_name, df_name)
+    },
+    
+    #' @description Generate example for purrr functions
+    #' @param func_name Name of the function
+    #' @param df_name Name of the data frame
+    #' @param df_info Information about the data frame
+    #' @return Example string
+    generate_purrr_example = function(func_name, df_name, df_info) {
+      # Get column names and types
+      col_names <- df_info$column_names
+      col_types <- df_info$column_types
+      
+      if (length(col_names) == 0) {
+        return(sprintf("# Using your data frame '%s' with purrr\n%s(list(), identity)", func_name, func_name))
+      }
+      
+      # Find numeric columns if column types are available
+      numeric_cols <- character(0)
+      
+      if (!is.null(col_types) && length(col_types) > 0) {
+        for (i in seq_along(col_types)) {
+          col <- names(col_types)[i]
+          type <- col_types[i]
+          
+          if (type %in% c("numeric", "integer", "double")) {
+            numeric_cols <- c(numeric_cols, col)
+          }
+        }
+      }
+      
+      # For basic map functions
+      if (func_name == "map") {
+        if (length(col_names) > 0) {
+          return(sprintf("# Apply a function to each column in your '%s' data frame\n%s |> %s(summary)", 
+                        df_name, df_name, func_name))
+        }
+      }
+      
+      # For typed map functions (map_dbl, map_int, etc.)
+      if (func_name %in% c("map_dbl", "map_int")) {
+        if (length(numeric_cols) > 0) {
+          return(sprintf("# Apply a function to numeric columns in your '%s' data frame\n%s |> select(%s) |> %s(mean, na.rm = TRUE)", 
+                        df_name, df_name, paste(numeric_cols, collapse = ", "), func_name))
+        } else if (length(col_names) > 0) {
+          return(sprintf("# Get a numeric result from each column in your '%s' data frame\n%s |> %s(~ length(unique(.x)))", 
+                        df_name, df_name, func_name))
+        }
+      }
+      
+      # For map_chr
+      if (func_name == "map_chr") {
+        return(sprintf("# Convert each column to a string representation in your '%s' data frame\n%s |> %s(~ paste(head(.x, 3), collapse = ', '))", 
+                      df_name, df_name, func_name))
+      }
+      
+      # For map_lgl
+      if (func_name == "map_lgl") {
+        return(sprintf("# Check a condition for each column in your '%s' data frame\n%s |> %s(~ any(is.na(.x)))", 
+                      df_name, df_name, func_name))
+      }
+      
+      # For map_df
+      if (func_name == "map_df") {
+        if (length(col_names) > 0) {
+          return(sprintf("# Create a data frame from applying a function in your '%s' data frame\n%s |> %s(~ data.frame(n = length(.x), mean = mean(.x, na.rm = TRUE)))", 
+                        df_name, df_name, func_name))
+        }
+      }
+      
+      # For keep/discard
+      if (func_name %in% c("keep", "discard")) {
+        comparison <- if (func_name == "keep") "TRUE" else "FALSE"
+        return(sprintf("# %s columns meeting a condition in your '%s' data frame\n%s |> %s(is.numeric)", 
+                      ifelse(func_name == "keep", "Keep", "Discard"), df_name, df_name, func_name))
+      }
+      
+      # For reduce
+      if (func_name == "reduce") {
+        if (length(numeric_cols) >= 2) {
+          num_cols <- paste(numeric_cols, collapse = ", ")
+          return(sprintf("# Combine numeric columns with a function in your '%s' data frame\n%s |> select(%s) |> %s(`+`)", 
+                        df_name, df_name, num_cols, func_name))
+        } else {
+          return(sprintf("# Combine values using a function in your '%s' data frame\n%s |> pull(%s) |> %s(`+`)", 
+                        df_name, df_name, col_names[1], func_name))
+        }
+      }
+      
+      # Generic fallback
+      sprintf("# Apply purrr::%s to your '%s' data frame\n%s |> %s(~ .x)", func_name, df_name, df_name, func_name)
+    },
+    
+    #' @description Generate example for survival analysis functions
+    #' @param func_name Name of the function
+    #' @param df_name Name of the data frame
+    #' @param df_info Information about the data frame
+    #' @return Example string
+    generate_survival_example = function(func_name, df_name, df_info) {
+      # Get column names and types
+      col_names <- df_info$column_names
+      col_types <- df_info$column_types
+      
+      if (length(col_names) < 2) {
+        return(sprintf("# Apply survival::%s to your data\n# Typically needs time and event status variables\nlibrary(survival)\n%s", func_name, func_name))
+      }
+      
+      # Find numeric and logical columns if column types are available
+      numeric_cols <- character(0)
+      logical_cols <- character(0)
+      
+      if (!is.null(col_types) && length(col_types) > 0) {
+        for (i in seq_along(col_types)) {
+          col <- names(col_types)[i]
+          type <- col_types[i]
+          
+          if (type %in% c("numeric", "integer", "double")) {
+            numeric_cols <- c(numeric_cols, col)
+          } else if (type == "logical") {
+            logical_cols <- c(logical_cols, col)
+          }
+        }
+      }
+      
+      # For Surv objects
+      if (func_name == "Surv") {
+        # We need at least one time variable and ideally a status indicator
+        time_var <- if (length(numeric_cols) > 0) numeric_cols[1] else col_names[1]
+        status_var <- if (length(logical_cols) > 0) logical_cols[1] else 
+                      if (length(numeric_cols) > 1) numeric_cols[2] else 
+                      if (length(col_names) > 1) col_names[2] else "status"
+        
+        return(sprintf("# Create a survival object using your '%s' data frame\nlibrary(survival)\n%s_surv <- with(%s, %s(%s, %s))", 
+                      df_name, df_name, df_name, func_name, time_var, status_var))
+      }
+      
+      # For survfit
+      if (func_name == "survfit") {
+        time_var <- if (length(numeric_cols) > 0) numeric_cols[1] else col_names[1]
+        status_var <- if (length(logical_cols) > 0) logical_cols[1] else 
+                      if (length(numeric_cols) > 1) numeric_cols[2] else 
+                      if (length(col_names) > 1) col_names[2] else "status"
+        
+        return(sprintf("# Fit a survival curve using your '%s' data frame\nlibrary(survival)\nfit <- %s(Surv(%s, %s) ~ 1, data = %s)\nplot(fit)", 
+                      df_name, func_name, time_var, status_var, df_name))
+      }
+      
+      # For coxph
+      if (func_name == "coxph") {
+        time_var <- if (length(numeric_cols) > 0) numeric_cols[1] else col_names[1]
+        status_var <- if (length(logical_cols) > 0) logical_cols[1] else 
+                      if (length(numeric_cols) > 1) numeric_cols[2] else 
+                      if (length(col_names) > 1) col_names[2] else "status"
+        
+        predictor <- if (length(col_names) > 2) col_names[3] else "predictor"
+        
+        return(sprintf("# Fit a Cox proportional hazards model using your '%s' data frame\nlibrary(survival)\nmodel <- %s(Surv(%s, %s) ~ %s, data = %s)\nsummary(model)", 
+                      df_name, func_name, time_var, status_var, predictor, df_name))
+      }
+      
+      # Generic fallback
+      sprintf("# Apply survival::%s to your '%s' data frame\nlibrary(survival)\n# Requires appropriate survival data\n", 
+              func_name, df_name)
     },
     
     #' @description Generate example for statistical modeling functions
