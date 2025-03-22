@@ -57,6 +57,9 @@ tldr_cache_clear(expired_only = TRUE)
 
 # Test connection to a provider
 tldr_test_connection("claude")
+
+# Open the GitHub repository in your browser
+tldr_open_repo()
 ```
 
 ## Features
@@ -166,6 +169,24 @@ Character voices transform the standard help text with personality traits while 
 | `reluctant_helper` | Acts comically put-upon about having to provide assistance |
 | `time_traveler` | Claims to be from the future and frames all solutions as "ancient techniques" |
 | `theatrical_villain` | Presents solutions with dramatic flair as if revealing an evil master plan |
+
+## Support the Project
+
+If you find tldrAI useful, please consider starring the repository on GitHub! This helps in several important ways:
+
+- **Visibility**: Stars help other R users discover the package
+- **Motivation**: It encourages continued development and maintenance
+- **Feedback**: Stars indicate the package is valuable to the community
+- **Networking**: It helps connect developers with similar interests
+
+You can easily star the repository by using:
+
+```r
+# Open the GitHub repository in your browser
+tldr_open_repo()
+```
+
+Then click the ⭐ (Star) button in the top-right corner of the repository page.
 
 ## License
 
