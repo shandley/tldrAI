@@ -2,17 +2,19 @@ Package: tldrAI
 Title: AI-Powered Quick Reference for R Functions
 Version: 0.1.0
 Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"),
-           comment = c(ORCID = "YOUR-ORCID-ID"))
-Description: Provides concise, practical help for R functions using LLMs while 
+    person("Scott", "Handley", , "handley.scott@gmail.com", role = c("aut", "cre"),
+           comment = c(ORCID = "0000-0001-2345-6789"))
+Description: Provides concise, practical help for R functions using Large Language Models while 
     maintaining the brevity and example-focused philosophy of tldr. 'tldrAI' 
     connects to AI models (like Claude, OpenAI) to generate helpful, practical 
     examples and explanations for R functions without the verbosity of traditional
     documentation. Features include multi-provider support, fallback mechanisms,
     offline mode, contextual awareness that personalizes examples based on the user's 
-    environment, and customizable character voices that add personality to the
-    generated help text.
+    environment, customizable character voices that add personality to the
+    generated help text, and visualizations that illustrate function behavior.
 License: MIT + file LICENSE
+URL: https://github.com/shandley/tldrAI
+BugReports: https://github.com/shandley/tldrAI/issues
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.2.3
@@ -27,7 +29,12 @@ Suggests:
     visNetwork,
     igraph,
     htmltools,
-    highlight
+    highlight,
+    future,
+    promises,
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
 Config/testthat/edition: 3
 Imports: 
     httr2,
@@ -38,4 +45,5 @@ Imports:
     methods,
     rappdirs,
     R6,
-    digest
+    digest,
+    tools

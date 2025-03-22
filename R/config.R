@@ -1,44 +1,128 @@
 #' Configure tldrAI settings
 #'
-#' @param api_key Character string containing the API key for Claude
-#' @param openai_api_key Character string containing the API key for OpenAI
-#' @param provider Character string specifying the default provider ("claude" or "openai")
-#' @param model Character string specifying which Claude model to use
-#' @param openai_model Character string specifying which OpenAI model to use
-#' @param cache_enabled Logical indicating whether to cache responses
-#' @param cache_dir Character string specifying the cache directory
-#' @param cache_ttl Numeric value indicating cache time-to-live in days
-#' @param offline_mode Logical indicating whether to operate in offline mode (use cache only)
-#' @param enable_fallback Logical indicating whether to enable provider fallback
-#' @param fallback_provider Character string specifying the fallback provider
-#' @param verbose_default Logical indicating the default verbosity
-#' @param examples_default Integer indicating the default number of examples
-#' @param character_voice Character string specifying the default character voice
-#' @param show_progress Logical indicating whether to show a progress bar during API calls
-#' @param debug_mode Logical indicating whether to show debug information
-#' @param async_mode Logical indicating whether to use asynchronous API calls
-#' @param timeout Numeric value specifying the API request timeout in seconds
-#' @param max_retries Numeric value specifying the maximum number of retries for API calls
-#' @param visualize Logical indicating whether to enable visualizations by default
-#' @param visualization_type Character string specifying the default visualization type
+#' This function allows you to configure various settings for the tldrAI package,
+#' including API keys, provider preferences, caching behavior, default display
+#' options, performance settings, and visualization settings. You can call it
+#' with one or more parameters to update specific settings without affecting others.
 #'
-#' @return Invisibly returns the updated configuration
+#' @section API Settings:
+#' \describe{
+#'   \item{api_key}{Character string containing the API key for Claude (Anthropic).
+#'        Required if using the Claude provider.}
+#'   \item{openai_api_key}{Character string containing the API key for OpenAI.
+#'        Required if using the OpenAI provider.}
+#'   \item{provider}{Character string specifying the default provider.
+#'        Options: "claude" (default) or "openai".}
+#'   \item{model}{Character string specifying which Claude model to use.
+#'        Options: "claude-3-opus-20240229" (default, most capable),
+#'        "claude-3-sonnet-20240229" (balanced), "claude-3-haiku-20240307" (fastest),
+#'        or "claude-2.1" (legacy).}
+#'   \item{openai_model}{Character string specifying which OpenAI model to use.
+#'        Options: "gpt-4o" (latest), "gpt-4-turbo" (default), "gpt-4" (legacy),
+#'        or "gpt-3.5-turbo" (faster, less capable).}
+#' }
+#'
+#' @section Caching Settings:
+#' \describe{
+#'   \item{cache_enabled}{Logical indicating whether to cache responses.
+#'        Default: TRUE. Caching improves performance and reduces API costs.}
+#'   \item{cache_dir}{Character string specifying the cache directory.
+#'        Default: Uses rappdirs::user_cache_dir("tldrAI").}
+#'   \item{cache_ttl}{Numeric value indicating cache time-to-live in days.
+#'        Default: 30. After this period, cached responses are considered expired.}
+#'   \item{offline_mode}{Logical indicating whether to operate in offline mode (use cache only).
+#'        Default: FALSE. When TRUE, no API calls will be made, only cached responses are used.}
+#' }
+#'
+#' @section Fallback Settings:
+#' \describe{
+#'   \item{enable_fallback}{Logical indicating whether to enable provider fallback.
+#'        Default: FALSE. When TRUE, automatically tries the fallback provider if the primary fails.}
+#'   \item{fallback_provider}{Character string specifying the fallback provider.
+#'        Default: "openai" if primary is "claude", and vice versa.}
+#' }
+#'
+#' @section Display Settings:
+#' \describe{
+#'   \item{verbose_default}{Logical indicating the default verbosity.
+#'        Default: FALSE. When TRUE, more detailed information is shown.}
+#'   \item{examples_default}{Integer indicating the default number of examples.
+#'        Default: 2. Higher values provide more diverse examples.}
+#'   \item{character_voice}{Character string specifying the default character voice.
+#'        Default: "none". Use tldr_list_voices() to see all options.}
+#'   \item{show_progress}{Logical indicating whether to show a progress bar during API calls.
+#'        Default: TRUE. Provides feedback while waiting for API responses.}
+#' }
+#'
+#' @section Debug Settings:
+#' \describe{
+#'   \item{debug_mode}{Logical indicating whether to show debug information.
+#'        Default: FALSE. When TRUE, shows detailed diagnostic information.}
+#' }
+#'
+#' @section Performance Settings:
+#' \describe{
+#'   \item{async_mode}{Logical indicating whether to use asynchronous API calls.
+#'        Default: FALSE. When TRUE, enables non-blocking API requests.}
+#'   \item{timeout}{Numeric value specifying the API request timeout in seconds.
+#'        Default: 60. Increase for slow connections.}
+#'   \item{max_retries}{Numeric value specifying the maximum number of retries for API calls.
+#'        Default: 3. Increases resilience on unstable connections.}
+#' }
+#'
+#' @section Visualization Settings:
+#' \describe{
+#'   \item{visualize}{Logical indicating whether to enable visualizations by default.
+#'        Default: FALSE. When TRUE, visualizations are included with responses.}
+#'   \item{visualization_type}{Character string specifying the default visualization type.
+#'        Options: "diagram" (default), "flowchart", "data_flow", "function_network", or "code_highlight".}
+#' }
+#'
+#' @return Invisibly returns the updated configuration, which can be used programmatically
+#'         if needed. The function primarily has side effects, updating the package configuration.
+#'
 #' @export
 #'
 #' @examples
 #' \dontrun{
-#' tldr_config(api_key = "your_claude_api_key")
-#' tldr_config(openai_api_key = "your_openai_api_key", provider = "openai")
-#' tldr_config(enable_fallback = TRUE, fallback_provider = "openai")
-#' tldr_config(verbose_default = TRUE)
-#' tldr_config(offline_mode = TRUE)  # Use cached responses only
-#' tldr_config(character_voice = "enthusiastic_explorer")  # Set default character voice
-#' tldr_config(show_progress = TRUE)  # Show progress bar during API calls
+#' # API Configuration
+#' tldr_config(api_key = "your_claude_api_key")  # Set Claude API key
+#' tldr_config(openai_api_key = "your_openai_api_key")  # Set OpenAI API key
+#' tldr_config(provider = "claude")  # Use Claude as default provider
+#' tldr_config(model = "claude-3-sonnet-20240229")  # Use a different Claude model
+#' tldr_config(openai_model = "gpt-4o")  # Use a different OpenAI model
+#' 
+#' # Fallback Configuration
+#' tldr_config(enable_fallback = TRUE, fallback_provider = "openai")  # Auto-fallback to OpenAI
+#' 
+#' # Display Configuration
+#' tldr_config(verbose_default = TRUE)  # Always show detailed information
+#' tldr_config(examples_default = 4)  # Show more examples by default
+#' tldr_config(character_voice = "enthusiastic_explorer")  # Set default voice
+#' tldr_config(show_progress = FALSE)  # Hide progress messages
+#' 
+#' # Cache Configuration
+#' tldr_config(cache_enabled = FALSE)  # Disable caching
+#' tldr_config(cache_ttl = 90)  # Keep cache for 90 days
+#' tldr_config(cache_dir = "~/R/tldrAI_cache")  # Custom cache location
+#' tldr_config(offline_mode = TRUE)  # Work in offline mode
+#' 
+#' # Performance Configuration
 #' tldr_config(async_mode = TRUE)  # Enable asynchronous API calls
-#' tldr_config(timeout = 30)  # Set API request timeout to 30 seconds
-#' tldr_config(max_retries = 5)  # Set maximum number of retries to 5
-#' tldr_config(visualize = TRUE)  # Enable visualizations
-#' tldr_config(visualization_type = "diagram")  # Set visualization type
+#' tldr_config(timeout = 120)  # Longer timeout for slow connections
+#' tldr_config(max_retries = 5)  # More retries for unreliable networks
+#' 
+#' # Visualization Configuration
+#' tldr_config(visualize = TRUE)  # Always include visualizations
+#' tldr_config(visualization_type = "function_network")  # Set default visualization type
+#' 
+#' # Multiple settings at once
+#' tldr_config(
+#'   provider = "claude",
+#'   character_voice = "wise_mentor",
+#'   verbose_default = TRUE,
+#'   visualize = TRUE
+#' )
 #' }
 tldr_config <- function(api_key = NULL, openai_api_key = NULL, 
                        provider = NULL, model = NULL, openai_model = NULL,

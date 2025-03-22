@@ -1791,23 +1791,101 @@ export_visualization <- function(visualization, file_path, format = NULL, width 
   invisible(visualization)
 }
 
-#' Configure visualization settings
+#' Configure visualization settings for tldrAI
 #'
-#' @param enable Logical indicating whether to enable visualizations
-#' @param default_type Character string specifying the default visualization type
-#' @param auto_install Logical indicating whether to automatically install required packages
-#' @param auto_export Logical indicating whether to automatically export visualizations
-#' @param export_format Character string specifying the default export format
-#' @param export_dir Character string specifying the default directory for exported visualizations
+#' This function configures the visualization system in tldrAI, which can generate
+#' diagrams, flowcharts, and other visual representations of R functions. You can
+#' enable or disable visualizations, set the default visualization type, configure
+#' automatic package installation, and set up export preferences.
 #'
-#' @return Invisibly returns the updated configuration
+#' @section Visualization Types:
+#' tldrAI supports multiple visualization types:
+#' \describe{
+#'   \item{diagram}{Simple function diagram showing inputs and outputs. Best for basic function understanding.}
+#'   \item{flowchart}{Logical flow diagram showing conditionals and loops. Best for understanding function processing flow.}
+#'   \item{data_flow}{Data transformation diagram. Best for data processing functions (dplyr, ggplot2, etc.).}
+#'   \item{function_network}{Network diagram showing related functions. Best for understanding function relationships.}
+#'   \item{code_highlight}{Syntax highlighted code with interactive elements. Best for examining implementation details.}
+#' }
+#'
+#' @section Required Packages:
+#' Different visualization types require different packages:
+#' \describe{
+#'   \item{diagram, flowchart}{Requires DiagrammeR}
+#'   \item{data_flow}{Requires DiagrammeR and htmlwidgets}
+#'   \item{function_network}{Requires visNetwork and igraph}
+#'   \item{code_highlight}{Requires htmltools and highlight}
+#' }
+#' For exporting:
+#' \describe{
+#'   \item{SVG export}{Requires DiagrammeRsvg for diagrams}
+#'   \item{PNG export}{Requires webshot for all visualization types}
+#' }
+#'
+#' @param enable Logical indicating whether to enable visualizations by default.
+#'        When TRUE, tldr() calls will include visualizations.
+#'        Default: FALSE.
+#'
+#' @param default_type Character string specifying the default visualization type.
+#'        Options: "diagram", "flowchart", "data_flow", "function_network", or "code_highlight".
+#'        Default: "diagram".
+#'
+#' @param auto_install Logical indicating whether to automatically install required packages.
+#'        When TRUE, missing packages will be installed without prompting.
+#'        When FALSE, ASCII fallbacks will be used if packages are missing.
+#'        Default: FALSE.
+#'
+#' @param auto_export Logical indicating whether to automatically export visualizations.
+#'        When TRUE, every visualization created is automatically saved to a file.
+#'        Default: FALSE.
+#'
+#' @param export_format Character string specifying the default export format.
+#'        Options: "svg" (vector graphics), "png" (bitmap image), or "txt" (ASCII art).
+#'        Default: "svg".
+#'
+#' @param export_dir Character string specifying the default directory for exported visualizations.
+#'        Default: Current working directory.
+#'
+#' @return Invisibly returns the updated configuration list. The function primarily
+#'         has side effects, updating the package configuration.
+#'
+#' @seealso
+#' \code{\link{tldr}} for using visualizations with the visualize=TRUE parameter
+#' \code{\link{export_visualization}} for manually exporting visualizations
+#'
 #' @export
 #'
 #' @examples
 #' \dontrun{
-#' tldr_visualization_config(enable = TRUE, default_type = "diagram")
-#' tldr_visualization_config(auto_export = TRUE, export_format = "svg")
-#' tldr_visualization_config(export_dir = "~/R/visualizations")
+#' # Basic configuration
+#' tldr_visualization_config(enable = TRUE)  # Enable visualizations
+#'
+#' # Set default visualization type
+#' tldr_visualization_config(default_type = "diagram")      # Simple function diagram
+#' tldr_visualization_config(default_type = "flowchart")    # Logical flow diagram
+#' tldr_visualization_config(default_type = "data_flow")    # Data transformation
+#' tldr_visualization_config(default_type = "function_network")  # Related functions
+#' tldr_visualization_config(default_type = "code_highlight")    # Syntax highlighted code
+#'
+#' # Configure package installation behavior
+#' tldr_visualization_config(auto_install = TRUE)  # Install packages automatically
+#'
+#' # Configure automatic exports
+#' tldr_visualization_config(
+#'   auto_export = TRUE,         # Export every visualization automatically
+#'   export_format = "svg",      # Use SVG format by default
+#'   export_dir = "~/R/vis"      # Save to specific directory
+#' )
+#'
+#' # Full configuration
+#' tldr_visualization_config(
+#'   enable = TRUE,
+#'   default_type = "function_network",
+#'   auto_install = TRUE,
+#'   auto_export = TRUE,
+#'   export_format = "svg",
+#'   export_dir = "~/R/visualizations"
+#' )
 #' }
 tldr_visualization_config <- function(enable = NULL, default_type = NULL, auto_install = NULL,
                                     auto_export = NULL, export_format = NULL, export_dir = NULL) {

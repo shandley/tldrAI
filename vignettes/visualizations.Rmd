@@ -1,0 +1,251 @@
+---
+title: "Using Visualizations in tldrAI"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Using Visualizations in tldrAI}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+# Visualizing R Functions with tldrAI
+
+One of the powerful features of `tldrAI` is its ability to generate visualizations that help understand R functions. These visualizations range from simple diagrams showing inputs and outputs to more complex representations of function relationships and code structure.
+
+This vignette explains the visualization capabilities in detail and provides guidance on how to use them effectively.
+
+## Visualization Types
+
+`tldrAI` offers five different visualization types, each designed to highlight different aspects of R functions:
+
+### 1. Diagram
+
+The basic diagram shows a function's inputs, outputs, and package relationship in a simple flowchart:
+
+```{r}
+tldr("mean", visualize = TRUE, vis_type = "diagram")
+```
+
+This is useful for:
+- Getting a quick overview of what a function does
+- Understanding the function's inputs and outputs
+- Seeing which package a function belongs to
+
+### 2. Flowchart
+
+The flowchart visualization shows the logical flow of a function, including conditional paths and loops:
+
+```{r}
+tldr("if", visualize = TRUE, vis_type = "flowchart")
+```
+
+This is useful for:
+- Understanding control flow in functions
+- Seeing how a function processes data
+- Visualizing conditional logic and loop structures
+
+### 3. Data Flow
+
+The data flow visualization focuses on how data is transformed through a function:
+
+```{r}
+tldr("dplyr::filter", visualize = TRUE, vis_type = "data_flow")
+```
+
+This is useful for:
+- Visualizing data transformation pipelines
+- Understanding how data flows through dplyr, ggplot2, or stats functions
+- Seeing the stages of data processing
+
+### 4. Function Network
+
+The function network visualization shows relationships between a function and other related functions:
+
+```{r}
+tldr("lm", visualize = TRUE, vis_type = "function_network")
+```
+
+This is useful for:
+- Discovering related functions that work together
+- Understanding function ecosystems within packages
+- Finding alternative functions for similar tasks
+
+### 5. Code Highlight
+
+The code highlight visualization shows the actual function code with syntax highlighting:
+
+```{r}
+tldr("mean", visualize = TRUE, vis_type = "code_highlight")
+```
+
+This is useful for:
+- Examining the implementation details of a function
+- Learning from well-written R code
+- Understanding exactly how a function works internally
+
+## Enabling Visualizations
+
+You can enable visualizations on a per-call basis:
+
+```{r}
+# Enable visualization for a specific call
+tldr("mean", visualize = TRUE)
+```
+
+Or set visualizations to be enabled by default:
+
+```{r}
+# Enable visualizations by default
+tldr_config(visualize = TRUE)
+```
+
+## Setting a Default Visualization Type
+
+You can set your preferred visualization type:
+
+```{r}
+# Set default visualization type
+tldr_visualization_config(enable = TRUE, default_type = "function_network")
+```
+
+Now all visualizations will use the function network type unless specified otherwise.
+
+## Exporting Visualizations
+
+You can export visualizations to files for use in documents, presentations, or sharing:
+
+```{r}
+# Export as SVG (vector graphics, good for presentations)
+tldr("mean", visualize = TRUE, export_visualization = TRUE, 
+     export_path = "mean_diagram.svg")
+
+# Export as PNG (bitmap image, good for web)
+tldr("lm", vis_type = "function_network", export_visualization = TRUE, 
+     export_path = "lm_network.png", export_format = "png")
+
+# Export as TXT (ASCII art, good for terminals/text documents)
+tldr("if", vis_type = "flowchart", export_visualization = TRUE, 
+     export_path = "if_flow.txt", export_format = "txt")
+```
+
+### Configuring Automatic Exports
+
+You can configure visualizations to be automatically exported:
+
+```{r}
+tldr_visualization_config(
+  auto_export = TRUE,               # Export all visualizations automatically
+  export_format = "svg",            # Default export format
+  export_dir = "~/R/visualizations" # Directory for exported files
+)
+```
+
+With this configuration, every visualization will be automatically saved to the specified directory.
+
+## Fallback Visualizations
+
+If graphical packages (DiagrammeR, visNetwork, etc.) are not installed, `tldrAI` will automatically fall back to ASCII art visualizations:
+
+```{r}
+# ASCII diagram when DiagrammeR is not available
+tldr("mean", visualize = TRUE)
+```
+
+These fallbacks ensure you still get valuable visualizations even in environments where installing graphical packages is not possible (like servers or restricted environments).
+
+## Required Packages
+
+Different visualization types require different R packages:
+
+- **diagram**: Requires `DiagrammeR`
+- **flowchart**: Requires `DiagrammeR`
+- **data_flow**: Requires `DiagrammeR`, `htmlwidgets`
+- **function_network**: Requires `visNetwork`, `igraph`
+- **code_highlight**: Requires `htmltools`, `highlight`
+
+For exporting:
+- **SVG export**: Requires `DiagrammeRsvg` for diagrams
+- **PNG export**: Requires `webshot` for all visualization types
+
+You can configure whether to prompt for package installation:
+
+```{r}
+# Auto-install required packages without prompting
+tldr_visualization_config(auto_install = TRUE)
+
+# Get a visualization that requires packages to be installed
+tldr("ggplot", vis_type = "function_network")
+```
+
+## Programmatic Access to Visualizations
+
+You can work with visualizations programmatically:
+
+```{r}
+# Get function metadata
+metadata <- get_function_metadata("mean")
+
+# Create visualization object
+vis <- create_visualization("mean", metadata, "diagram")
+
+# Print visualization
+print_visualization(vis)
+
+# Export visualization
+export_visualization(vis, "mean_diagram.svg")
+export_visualization(vis, "mean_diagram.png", format = "png")
+export_visualization(vis, "mean_diagram.txt", format = "txt")
+```
+
+## Examples for Different Function Types
+
+Different visualization types are better suited for different kinds of functions:
+
+### Data Manipulation Functions
+
+For functions like `dplyr::filter`, `dplyr::mutate`, or `tidyr::pivot_longer`:
+
+```{r}
+# Data flow is best for data manipulation functions
+tldr("dplyr::filter", vis_type = "data_flow")
+```
+
+### Statistical Functions
+
+For functions like `lm`, `t.test`, or `anova`:
+
+```{r}
+# Function network is useful for statistical functions
+tldr("lm", vis_type = "function_network")
+```
+
+### Control Flow Functions
+
+For functions like `if`, `for`, or `while`:
+
+```{r}
+# Flowchart is best for control flow
+tldr("if", vis_type = "flowchart")
+```
+
+### Base R Functions
+
+For fundamental functions like `mean`, `sum`, or `apply`:
+
+```{r}
+# Code highlight is good for understanding base R
+tldr("apply", vis_type = "code_highlight")
+```
+
+## Conclusion
+
+Visualizations in `tldrAI` provide a powerful way to understand R functions from different perspectives. Whether you're learning a new function, exploring a package, or teaching others, these visualizations can enhance comprehension and make the learning process more engaging.
+
+By using different visualization types for different functions and contexts, you can gain deeper insights into how R functions work and how they relate to each other within the broader R ecosystem.

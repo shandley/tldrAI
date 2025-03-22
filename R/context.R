@@ -1879,27 +1879,112 @@ find_package <- function(func_name) {
 
 #' Configure context awareness settings for tldrAI
 #'
-#' @param enable_context_awareness Logical indicating whether to enable context awareness
-#' @param analyze_data_frames Logical indicating whether to analyze data frames
-#' @param analyze_packages Logical indicating whether to analyze active packages
-#' @param analyze_history Logical indicating whether to analyze command history
-#' @param anonymize_data Logical indicating whether to anonymize data samples
-#' @param max_rows_sample Integer specifying maximum rows to sample from data frames
-#' @param max_cols_sample Integer specifying maximum columns to sample from data frames
-#' @param include_row_count Logical indicating whether to include row counts in context
-#' @param include_class_info Logical indicating whether to include class information
-#' @param include_column_types Logical indicating whether to include column types
-#' @param max_history_commands Integer specifying maximum number of history commands to analyze
+#' This function configures how tldrAI analyzes your R environment to provide 
+#' personalized, contextual examples. Context awareness allows tldrAI to understand
+#' what data you're working with, which packages you have loaded, and what commands
+#' you've recently run, in order to generate more relevant and useful help.
 #'
-#' @return Invisibly returns the updated configuration
+#' @section Privacy Controls:
+#' The context analyzer includes strong privacy controls. By default, actual data values
+#' are never sent to the LLM provider - only structural information about your data frames
+#' (like column names and types) is included. You can further customize what information
+#' is collected using the privacy settings below.
+#'
+#' @param enable_context_awareness Logical indicating whether to enable context awareness.
+#'        When TRUE, tldrAI analyzes your environment for personalized examples.
+#'        Default: TRUE.
+#'        
+#' @param analyze_data_frames Logical indicating whether to analyze data frames in your environment.
+#'        When TRUE, scans data frames to understand their structure for relevant examples.
+#'        Default: TRUE.
+#'        
+#' @param analyze_packages Logical indicating whether to analyze active packages.
+#'        When TRUE, includes information about which packages you have loaded.
+#'        Default: TRUE.
+#'        
+#' @param analyze_history Logical indicating whether to analyze command history.
+#'        When TRUE, examines recent commands to understand your workflow.
+#'        Default: TRUE.
+#'        
+#' @param anonymize_data Logical indicating whether to anonymize data samples.
+#'        When TRUE (STRONGLY RECOMMENDED), no actual data values are sent to the LLM.
+#'        Default: TRUE.
+#'        
+#' @param max_rows_sample Integer specifying maximum rows to sample from data frames.
+#'        Controls how many rows are examined for structure analysis.
+#'        Default: 5.
+#'        
+#' @param max_cols_sample Integer specifying maximum columns to sample from data frames.
+#'        Controls how many columns are examined for structure analysis.
+#'        Default: 5.
+#'        
+#' @param include_row_count Logical indicating whether to include row counts in context.
+#'        When TRUE, includes information about the size of your data frames.
+#'        Default: TRUE.
+#'        
+#' @param include_class_info Logical indicating whether to include class information.
+#'        When TRUE, includes information about the classes of your data frames and columns.
+#'        Default: TRUE.
+#'        
+#' @param include_column_types Logical indicating whether to include column types.
+#'        When TRUE, includes information about data types of columns.
+#'        Default: TRUE.
+#'        
+#' @param max_history_commands Integer specifying maximum number of history commands to analyze.
+#'        Controls how many recent commands are examined.
+#'        Default: 10.
+#'
+#' @return Invisibly returns the updated configuration list. The function primarily
+#'         has side effects, updating the package configuration.
+#'         
+#' @seealso
+#' \code{\link{tldr}} for using context-aware help with the context=TRUE parameter
+#' \code{\link{tldr_test_context}} for testing what context data would be collected
+#'
 #' @export
 #'
 #' @examples
 #' \dontrun{
-#' tldr_context_config(enable_context_awareness = TRUE)
-#' tldr_context_config(analyze_data_frames = TRUE, anonymize_data = TRUE)
-#' tldr_context_config(max_rows_sample = 3, max_cols_sample = 5)
-#' tldr_context_config(analyze_history = FALSE)  # Disable command history analysis
+#' # Basic configuration
+#' tldr_context_config(enable_context_awareness = TRUE)  # Enable context awareness
+#'
+#' # Privacy settings
+#' tldr_context_config(anonymize_data = TRUE)  # Ensure data values remain private
+#' 
+#' # Configure what gets analyzed
+#' tldr_context_config(
+#'   analyze_data_frames = TRUE,  # Look at data frames
+#'   analyze_packages = TRUE,     # Check loaded packages
+#'   analyze_history = FALSE      # Don't check command history
+#' )
+#' 
+#' # Limit data sampling
+#' tldr_context_config(
+#'   max_rows_sample = 3,       # Only look at first 3 rows
+#'   max_cols_sample = 5        # Only look at first 5 columns
+#' )
+#' 
+#' # Control information detail
+#' tldr_context_config(
+#'   include_row_count = TRUE,      # Include data frame dimensions
+#'   include_class_info = TRUE,     # Include class information
+#'   include_column_types = TRUE    # Include column data types
+#' )
+#' 
+#' # Comprehensive configuration
+#' tldr_context_config(
+#'   enable_context_awareness = TRUE,
+#'   analyze_data_frames = TRUE,
+#'   analyze_packages = TRUE,
+#'   analyze_history = TRUE,
+#'   anonymize_data = TRUE,
+#'   max_rows_sample = 5,
+#'   max_cols_sample = 5,
+#'   include_row_count = TRUE,
+#'   include_class_info = TRUE,
+#'   include_column_types = TRUE,
+#'   max_history_commands = 10
+#' )
 #' }
 tldr_context_config <- function(
   enable_context_awareness = NULL,
