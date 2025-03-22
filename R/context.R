@@ -331,6 +331,31 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
       # Get top data frames
       top_dfs <- names(head(relevance_scores, top_n))
       
+      # Verify all data frames still exist (they could have been deleted since analysis)
+      if (length(top_dfs) > 0) {
+        # Filter to only include data frames that still exist
+        existing_dfs <- top_dfs[sapply(top_dfs, function(df_name) {
+          exists(df_name, envir = .GlobalEnv) && is.data.frame(get(df_name, envir = .GlobalEnv))
+        })]
+        
+        if (length(existing_dfs) == 0) {
+          # If all the top data frames were deleted, we need to re-analyze the environment
+          if (get_config("debug_mode", default = FALSE)) {
+            message("DEBUG: Data frames changed, re-analyzing environment")
+          }
+          self$analyze_environment()
+          # Recalculate relevance with current environment
+          relevance_scores <- self$score_data_frame_relevance(func_name, func_metadata)
+          if (length(relevance_scores) == 0) {
+            return(character(0))
+          }
+          top_dfs <- names(head(relevance_scores, top_n))
+        } else {
+          # Use only existing data frames
+          top_dfs <- existing_dfs
+        }
+      }
+      
       # Generate examples based on function and data frames
       examples <- character(0)
       
@@ -339,6 +364,12 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
       
       # Generate examples based on package and available data
       for (df_name in top_dfs) {
+        # Double-check the data frame exists and its info is available
+        if (!exists(df_name, envir = .GlobalEnv) || !is.data.frame(get(df_name, envir = .GlobalEnv)) || 
+            is.null(self$context_data$data_frames[[df_name]])) {
+          next  # Skip to the next data frame
+        }
+        
         df_info <- self$context_data$data_frames[[df_name]]
         
         # Try to generate examples with proper error handling for missing packages

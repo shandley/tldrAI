@@ -371,7 +371,33 @@ get_ai_response <- function(prompt, provider_override = NULL, async = FALSE) {
   
   # Check if cached response exists first before making API calls
   if (get_config("cache_enabled", default = TRUE)) {
-    cache_key <- digest::digest(list(prompt = prompt, provider = provider_name), algo = "sha256")
+    # Generate environment fingerprint for context-aware responses
+    env_fingerprint <- NULL
+    if (grepl("CONTEXT NOTE|Context awareness mode is set to: YES", prompt, fixed = FALSE)) {
+      # For context-aware prompts, include environment data in cache key
+      # This ensures the cache updates when environment (like data frames) changes
+      env_objects <- ls(envir = .GlobalEnv)
+      dfs <- env_objects[sapply(env_objects, function(x) is.data.frame(get(x, envir = .GlobalEnv)))]
+      if (length(dfs) > 0) {
+        df_info <- lapply(dfs, function(df_name) {
+          df <- get(df_name, envir = .GlobalEnv)
+          list(
+            name = df_name,
+            dims = dim(df),
+            col_names = colnames(df)
+          )
+        })
+        env_fingerprint <- df_info
+      }
+    }
+    
+    # Create cache key from prompt, provider, and environment fingerprint (if context-aware)
+    cache_key <- digest::digest(list(
+      prompt = prompt, 
+      provider = provider_name,
+      env_fingerprint = env_fingerprint
+    ), algo = "sha256")
+    
     cache_path <- file.path(get_config("cache_dir"), paste0(cache_key, ".rds"))
     
     # Use cached response if available and not in refresh mode
@@ -428,9 +454,34 @@ get_ai_response <- function(prompt, provider_override = NULL, async = FALSE) {
             !grepl("\\{\\{EXAMPLES\\}\\}", result, fixed = TRUE) &&
             nchar(result) > 50) {
           
-          # We use digest to create a unique hash based on the prompt and provider
+          # We use digest to create a unique hash based on the prompt, provider, and environment
           # This ensures different functions with similar names don't collide
-          cache_key <- digest::digest(list(prompt = prompt, provider = provider$provider_name), algo = "sha256")
+          # and that context-aware responses update when the environment changes
+          
+          # Generate environment fingerprint for context-aware responses
+          env_fingerprint <- NULL
+          if (grepl("CONTEXT NOTE|Context awareness mode is set to: YES", prompt, fixed = FALSE)) {
+            # For context-aware prompts, include environment data in cache key
+            env_objects <- ls(envir = .GlobalEnv)
+            dfs <- env_objects[sapply(env_objects, function(x) is.data.frame(get(x, envir = .GlobalEnv)))]
+            if (length(dfs) > 0) {
+              df_info <- lapply(dfs, function(df_name) {
+                df <- get(df_name, envir = .GlobalEnv)
+                list(
+                  name = df_name,
+                  dims = dim(df),
+                  col_names = colnames(df)
+                )
+              })
+              env_fingerprint <- df_info
+            }
+          }
+          
+          cache_key <- digest::digest(list(
+            prompt = prompt, 
+            provider = provider$provider_name,
+            env_fingerprint = env_fingerprint
+          ), algo = "sha256")
           cache_path <- file.path(get_config("cache_dir"), paste0(cache_key, ".rds"))
           
           # Ensure cache directory exists

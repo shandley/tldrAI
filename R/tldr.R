@@ -78,8 +78,8 @@ tldr <- function(func_name, verbose = NULL, examples = NULL, refresh = FALSE,
     message("DEBUG: Context mode: ", context)
   }
   
-  # Check for cached response - if using context, always require fresh API call
-  # as context is specific to the current environment
+  # ALWAYS generate a fresh response in context mode, since data frames and environment can change
+  # This prevents stale contextual examples when data frames are deleted or modified
   if (!refresh && !context && file.exists(cache_path)) {
     # Check if cache is expired
     cache_ttl <- get_config("cache_ttl", default = 30)
