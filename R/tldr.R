@@ -129,7 +129,13 @@ tldr <- function(func_name, verbose = NULL, examples = NULL, refresh = FALSE,
       message("DEBUG: Function metadata:")
       message("DEBUG:   - Package: ", metadata$package)
       message("DEBUG:   - Signature: ", metadata$signature)
-      message("DEBUG:   - Description: ", substr(metadata$description, 1, 50), "...")
+      if (!is.null(metadata$description)) {
+        message("DEBUG:   - Description: ", substr(metadata$description, 1, 50), "...")
+      } else if (!is.null(metadata$missing_package) && metadata$missing_package) {
+        message("DEBUG:   - Missing package: ", metadata$package)
+      } else if (!is.null(metadata$missing_function) && metadata$missing_function) {
+        message("DEBUG:   - Missing function: ", metadata$name, " in package ", metadata$package)
+      }
     }
     
     metadata
@@ -154,48 +160,63 @@ tldr <- function(func_name, verbose = NULL, examples = NULL, refresh = FALSE,
   # Handle contextual awareness
   context_data <- NULL
   if (context) {
-    # Get context settings
-    config <- get_config_all()
-    context_settings <- config$context_settings %||% list(
-      enable_context_awareness = TRUE,
-      analyze_data_frames = TRUE,
-      analyze_packages = TRUE,
-      analyze_history = TRUE,
-      anonymize_data = TRUE,
-      max_rows_sample = 5,
-      max_cols_sample = 5,
-      include_row_count = TRUE,
-      include_class_info = TRUE,
-      include_column_types = TRUE,
-      max_history_commands = 10
-    )
-    
-    # Create context analyzer and analyze environment
-    if (get_config("debug_mode", default = FALSE)) {
-      message("DEBUG: Analyzing user environment context")
-    }
-    
-    # Initialize context analyzer with current settings
-    context_analyzer <- ContextAnalyzer$new(context_settings)
-    
-    # Analyze the environment
-    context_analyzer$analyze_environment()
-    
-    # Format context data for prompt
-    context_data <- context_analyzer$format_context_for_prompt(func_name, func_metadata)
-    
-    # Generate contextual examples if possible
-    contextual_examples <- context_analyzer$generate_contextual_examples(func_name, func_metadata)
-    
-    # Add suggested next steps if available
-    next_steps <- context_analyzer$suggest_next_steps(func_name, func_metadata)
-    
-    if (length(next_steps) > 0) {
-      context_data <- paste0(context_data, "\n\nWORKFLOW SUGGESTIONS:\n", paste(next_steps, collapse = "\n"))
-    }
-    
-    if (get_config("debug_mode", default = FALSE)) {
-      message("DEBUG: Context data generated successfully")
+    # Check if the function has a missing package flag
+    if (!is.null(func_metadata$missing_package) && func_metadata$missing_package) {
+      # If the package is missing, we'll still provide context data but note the missing package
+      context_data <- paste0("CONTEXT NOTE: While analyzing your environment, I notice that you're interested in the '", 
+                           func_name, "' function from the '", func_metadata$package, 
+                           "' package, which is not installed. I've provided general information about this function",
+                           " and installation instructions above.")
+      
+      # Add the basic installation command from the metadata
+      if (!is.null(func_metadata$install_command)) {
+        context_data <- paste0(context_data, "\n\nINSTALLATION: ", func_metadata$install_command)
+      }
+    } else {
+      # Regular context processing for installed packages or functions
+      # Get context settings
+      config <- get_config_all()
+      context_settings <- config$context_settings %||% list(
+        enable_context_awareness = TRUE,
+        analyze_data_frames = TRUE,
+        analyze_packages = TRUE,
+        analyze_history = TRUE,
+        anonymize_data = TRUE,
+        max_rows_sample = 5,
+        max_cols_sample = 5,
+        include_row_count = TRUE,
+        include_class_info = TRUE,
+        include_column_types = TRUE,
+        max_history_commands = 10
+      )
+      
+      # Create context analyzer and analyze environment
+      if (get_config("debug_mode", default = FALSE)) {
+        message("DEBUG: Analyzing user environment context")
+      }
+      
+      # Initialize context analyzer with current settings
+      context_analyzer <- ContextAnalyzer$new(context_settings)
+      
+      # Analyze the environment
+      context_analyzer$analyze_environment()
+      
+      # Format context data for prompt
+      context_data <- context_analyzer$format_context_for_prompt(func_name, func_metadata)
+      
+      # Generate contextual examples if possible
+      contextual_examples <- context_analyzer$generate_contextual_examples(func_name, func_metadata)
+      
+      # Add suggested next steps if available
+      next_steps <- context_analyzer$suggest_next_steps(func_name, func_metadata)
+      
+      if (length(next_steps) > 0) {
+        context_data <- paste0(context_data, "\n\nWORKFLOW SUGGESTIONS:\n", paste(next_steps, collapse = "\n"))
+      }
+      
+      if (get_config("debug_mode", default = FALSE)) {
+        message("DEBUG: Context data generated successfully")
+      }
     }
   }
   

@@ -341,19 +341,37 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
       for (df_name in top_dfs) {
         df_info <- self$context_data$data_frames[[df_name]]
         
+        # Try to generate examples with proper error handling for missing packages
+        
         # Tidyverse/dplyr functions
         if (func_package == "dplyr" && func_name %in% c("filter", "select", "mutate", "summarise", "group_by", 
                                                      "arrange", "distinct", "left_join", "right_join", "inner_join", "full_join")) {
-          examples <- c(examples, self$generate_dplyr_example(func_name, df_name, df_info))
+          if (requireNamespace("dplyr", quietly = TRUE)) {
+            examples <- c(examples, self$generate_dplyr_example(func_name, df_name, df_info))
+          } else {
+            # Add a placeholder with installation suggestion
+            examples <- c(examples, sprintf("# To use dplyr::%s with your '%s' data frame:\n# First install the package: install.packages(\"dplyr\")", 
+                                           func_name, df_name))
+          }
         } 
         # tidyr functions
         else if (func_package == "tidyr" && func_name %in% c("pivot_longer", "pivot_wider", "separate", "unite", "drop_na", "fill")) {
-          examples <- c(examples, self$generate_tidyr_example(func_name, df_name, df_info))
+          if (requireNamespace("tidyr", quietly = TRUE)) {
+            examples <- c(examples, self$generate_tidyr_example(func_name, df_name, df_info))
+          } else {
+            examples <- c(examples, sprintf("# To use tidyr::%s with your '%s' data frame:\n# First install the package: install.packages(\"tidyr\")", 
+                                           func_name, df_name))
+          }
         } 
         # ggplot2 functions
         else if (func_package == "ggplot2" && func_name %in% c("ggplot", "geom_point", "geom_line", "geom_bar", 
                                                            "geom_histogram", "geom_boxplot", "geom_density", "facet_wrap", "facet_grid", "theme_minimal")) {
-          examples <- c(examples, self$generate_ggplot_example(func_name, df_name, df_info))
+          if (requireNamespace("ggplot2", quietly = TRUE)) {
+            examples <- c(examples, self$generate_ggplot_example(func_name, df_name, df_info))
+          } else {
+            examples <- c(examples, sprintf("# To use ggplot2::%s with your '%s' data frame:\n# First install the package: install.packages(\"ggplot2\")", 
+                                           func_name, df_name))
+          }
         } 
         # Basic statistics functions
         else if ((func_package == "base" || func_package == "stats") && 
@@ -366,15 +384,30 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
         }
         # purrr functions
         else if (func_package == "purrr" && func_name %in% c("map", "map_dbl", "map_chr", "map_int", "map_lgl", "map_df", "reduce", "keep", "discard")) {
-          examples <- c(examples, self$generate_purrr_example(func_name, df_name, df_info))
+          if (requireNamespace("purrr", quietly = TRUE)) {
+            examples <- c(examples, self$generate_purrr_example(func_name, df_name, df_info))
+          } else {
+            examples <- c(examples, sprintf("# To use purrr::%s with your '%s' data frame:\n# First install the package: install.packages(\"purrr\")", 
+                                           func_name, df_name))
+          }
         }
         # Survival analysis
         else if (func_package == "survival" && func_name %in% c("Surv", "survfit", "coxph")) {
-          examples <- c(examples, self$generate_survival_example(func_name, df_name, df_info))
+          if (requireNamespace("survival", quietly = TRUE)) {
+            examples <- c(examples, self$generate_survival_example(func_name, df_name, df_info))
+          } else {
+            examples <- c(examples, sprintf("# To use survival::%s with your '%s' data frame:\n# First install the package: install.packages(\"survival\")", 
+                                           func_name, df_name))
+          }
         }
         # data.table functions
         else if (func_package == "data.table" && func_name %in% c("[", "data.table", "setkey", "setDT", "setDF", "fread", "fwrite", "melt", "dcast", "rbindlist")) {
-          examples <- c(examples, self$generate_data_table_example(func_name, df_name, df_info))
+          if (requireNamespace("data.table", quietly = TRUE)) {
+            examples <- c(examples, self$generate_data_table_example(func_name, df_name, df_info))
+          } else {
+            examples <- c(examples, sprintf("# To use data.table::%s with your '%s' data frame:\n# First install the package: install.packages(\"data.table\")", 
+                                           func_name, df_name))
+          }
         }
         # Machine learning functions
         else if (func_package %in% c("caret", "randomForest", "rpart", "glmnet") || 
@@ -382,7 +415,27 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
                                 "randomForest", "importance", "varImpPlot", 
                                 "rpart", "rpart.plot", "prune", 
                                 "glmnet", "cv.glmnet")) {
-          examples <- c(examples, self$generate_ml_example(func_name, df_name, df_info))
+          # Check if the relevant ML package is installed
+          required_pkg <- func_package
+          if (func_package == "unknown" || func_package == "base" || func_package == "stats") {
+            # Guess the package based on function name
+            if (func_name %in% c("train", "trainControl", "createDataPartition", "createFolds")) {
+              required_pkg <- "caret"
+            } else if (func_name %in% c("randomForest", "importance", "varImpPlot")) {
+              required_pkg <- "randomForest"
+            } else if (func_name %in% c("rpart", "prune")) {
+              required_pkg <- "rpart"
+            } else if (func_name %in% c("glmnet", "cv.glmnet")) {
+              required_pkg <- "glmnet"
+            }
+          }
+          
+          if (requireNamespace(required_pkg, quietly = TRUE)) {
+            examples <- c(examples, self$generate_ml_example(func_name, df_name, df_info))
+          } else {
+            examples <- c(examples, sprintf("# To use %s::%s with your '%s' data frame:\n# First install the package: install.packages(\"%s\")", 
+                                           required_pkg, func_name, df_name, required_pkg))
+          }
         }
         # Generic examples for any other function
         else {

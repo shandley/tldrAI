@@ -3,7 +3,7 @@
 #' @param func_name The name of the function
 #' @param package The package name (optional)
 #'
-#' @return A list with function metadata
+#' @return A list with function metadata, or a special metadata object for missing packages
 #' @keywords internal
 get_function_metadata <- function(func_name, package = NULL) {
   if (get_config("debug_mode", default = FALSE)) {
@@ -16,7 +16,34 @@ get_function_metadata <- function(func_name, package = NULL) {
   # Try to get the function from specified package first
   if (!is.null(package)) {
     if (!requireNamespace(package, quietly = TRUE)) {
-      stop("Package '", package, "' is not installed or cannot be loaded")
+      # Return a special metadata object for missing packages
+      if (get_config("debug_mode", default = FALSE)) {
+        message("DEBUG: Package '", package, "' is not installed or cannot be loaded")
+      }
+      
+      # Check if the package is available on CRAN to provide installation instructions
+      is_cran_pkg <- tryCatch({
+        # Try to get package info from available.packages()
+        available_pkgs <- utils::available.packages()
+        package %in% rownames(available_pkgs)
+      }, error = function(e) {
+        # If there's an error (e.g., no internet), assume it might be on CRAN
+        TRUE
+      })
+      
+      install_cmd <- if (is_cran_pkg) {
+        paste0('install.packages("', package, '")')
+      } else {
+        paste0('# Package not found on CRAN. Try:\n# install.packages("', package, '") # If available elsewhere\n# Or check: https://github.com/search?q=', package)
+      }
+      
+      return(list(
+        name = func_name,
+        package = package,
+        missing_package = TRUE,
+        install_command = install_cmd,
+        signature = paste0(func_name, "(...)")
+      ))
     }
     
     # Check if function exists in the package
@@ -45,7 +72,17 @@ get_function_metadata <- function(func_name, package = NULL) {
         body_summary = body_str
       ))
     } else {
-      stop("Function '", func_name, "' not found in package '", package, "'")
+      # Return a special metadata object for missing functions
+      if (get_config("debug_mode", default = FALSE)) {
+        message("DEBUG: Function '", func_name, "' not found in package '", package, "'")
+      }
+      
+      return(list(
+        name = func_name,
+        package = package,
+        missing_function = TRUE,
+        signature = paste0(func_name, "(...)")
+      ))
     }
   }
   
