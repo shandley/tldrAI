@@ -1,0 +1,26 @@
+Package: tldrAI
+Title: AI-Powered Quick Reference for R Functions
+Version: 0.1.0
+Authors@R: 
+    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"),
+           comment = c(ORCID = "YOUR-ORCID-ID"))
+Description: Provides concise, practical help for R functions using LLMs while 
+    maintaining the brevity and example-focused philosophy of tldr. 'tldrAI' 
+    connects to AI models to generate helpful, practical examples and explanations
+    for R functions without the verbosity of traditional documentation.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.2.3
+Suggests: 
+    testthat (>= 3.0.0),
+    mockr
+Config/testthat/edition: 3
+Imports: 
+    httr2,
+    jsonlite,
+    crayon,
+    cli,
+    utils,
+    methods,
+    rappdirs
