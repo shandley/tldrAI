@@ -7,6 +7,7 @@
 #' @param provider Character string specifying the LLM provider to use ("claude" or "openai")
 #' @param voice Character string specifying the character voice to use (e.g., "enthusiastic_explorer")
 #' @param async Logical indicating whether to make the API call asynchronously
+#' @param context Logical indicating whether to use contextual awareness
 #'
 #' @return Prints formatted help to the console (invisibly returns the raw response)
 #' @export
@@ -19,9 +20,10 @@
 #' tldr("median", voice = "enthusiastic_explorer")
 #' tldr("sd", voice = "cynical_detective")
 #' tldr("plot", async = TRUE)  # Make an asynchronous API call
+#' tldr("filter", context = TRUE)  # Use contextual awareness
 #' }
 tldr <- function(func_name, verbose = NULL, examples = NULL, refresh = FALSE, 
-                provider = NULL, voice = NULL, async = NULL) {
+                provider = NULL, voice = NULL, async = NULL, context = NULL) {
   # Validate input
   if (!is.character(func_name) || length(func_name) != 1) {
     stop("func_name must be a single character string")
@@ -32,6 +34,15 @@ tldr <- function(func_name, verbose = NULL, examples = NULL, refresh = FALSE,
   if (is.null(examples)) examples <- get_config("examples_default", default = 2)
   if (is.null(voice)) voice <- get_config("character_voice", default = "none")
   if (is.null(async)) async <- get_config("async_mode", default = FALSE)
+  if (is.null(context)) {
+    # Get default context setting from config
+    config <- get_config_all()
+    if (!is.null(config$context_settings) && !is.null(config$context_settings$enable_context_awareness)) {
+      context <- config$context_settings$enable_context_awareness
+    } else {
+      context <- FALSE  # Default to false if not configured
+    }
+  }
   
   # Set refresh mode temporarily in the config to be used by get_ai_response
   if (refresh) {
@@ -60,10 +71,12 @@ tldr <- function(func_name, verbose = NULL, examples = NULL, refresh = FALSE,
     message("DEBUG: Provider: ", selected_provider)
     message("DEBUG: Cache path: ", cache_path)
     message("DEBUG: Async mode: ", async)
+    message("DEBUG: Context mode: ", context)
   }
   
-  # Check for cached response first (moved to get_ai_response for centralized handling)
-  if (!refresh && file.exists(cache_path)) {
+  # Check for cached response - if using context, always require fresh API call
+  # as context is specific to the current environment
+  if (!refresh && !context && file.exists(cache_path)) {
     # Check if cache is expired
     cache_ttl <- get_config("cache_ttl", default = 30)
     file_time <- file.info(cache_path)$mtime
@@ -95,8 +108,12 @@ tldr <- function(func_name, verbose = NULL, examples = NULL, refresh = FALSE,
       return(invisible(response))
     }
     # Otherwise continue to get a fresh response
-  } else if (refresh && get_config("offline_mode", default = FALSE)) {
-    stop("Cannot refresh in offline mode. Disable offline mode first with tldr_offline(FALSE).")
+  } else if ((refresh || context) && get_config("offline_mode", default = FALSE)) {
+    if (context) {
+      stop("Cannot use context awareness in offline mode. Disable offline mode first with tldr_offline(FALSE).")
+    } else {
+      stop("Cannot refresh in offline mode. Disable offline mode first with tldr_offline(FALSE).")
+    }
   }
   
   # Get function metadata
@@ -130,8 +147,56 @@ tldr <- function(func_name, verbose = NULL, examples = NULL, refresh = FALSE,
     }
   })
   
-  # Build prompt
-  prompt <- build_prompt(func_name, func_metadata, verbose, examples)
+  # Handle contextual awareness
+  context_data <- NULL
+  if (context) {
+    # Get context settings
+    config <- get_config_all()
+    context_settings <- config$context_settings %||% list(
+      enable_context_awareness = TRUE,
+      analyze_data_frames = TRUE,
+      analyze_packages = TRUE,
+      analyze_history = TRUE,
+      anonymize_data = TRUE,
+      max_rows_sample = 5,
+      max_cols_sample = 5,
+      include_row_count = TRUE,
+      include_class_info = TRUE,
+      include_column_types = TRUE,
+      max_history_commands = 10
+    )
+    
+    # Create context analyzer and analyze environment
+    if (get_config("debug_mode", default = FALSE)) {
+      message("DEBUG: Analyzing user environment context")
+    }
+    
+    # Initialize context analyzer with current settings
+    context_analyzer <- ContextAnalyzer$new(context_settings)
+    
+    # Analyze the environment
+    context_analyzer$analyze_environment()
+    
+    # Format context data for prompt
+    context_data <- context_analyzer$format_context_for_prompt(func_name, func_metadata)
+    
+    # Generate contextual examples if possible
+    contextual_examples <- context_analyzer$generate_contextual_examples(func_name, func_metadata)
+    
+    # Add suggested next steps if available
+    next_steps <- context_analyzer$suggest_next_steps(func_name, func_metadata)
+    
+    if (length(next_steps) > 0) {
+      context_data <- paste0(context_data, "\n\nWORKFLOW SUGGESTIONS:\n", paste(next_steps, collapse = "\n"))
+    }
+    
+    if (get_config("debug_mode", default = FALSE)) {
+      message("DEBUG: Context data generated successfully")
+    }
+  }
+  
+  # Build prompt with or without context
+  prompt <- build_prompt(func_name, func_metadata, verbose, examples, context_data)
   
   # Get API response in offline mode?
   if (get_config("offline_mode", default = FALSE) && !file.exists(cache_path)) {
@@ -179,6 +244,7 @@ tldr <- function(func_name, verbose = NULL, examples = NULL, refresh = FALSE,
       examples = examples,
       provider = selected_provider,
       voice = voice,
+      context = context,
       timestamp = Sys.time()
     ), envir = .GlobalEnv)
     
@@ -257,6 +323,11 @@ tldr_check_async <- function(wait = TRUE, timeout = 30) {
     if (async_req$voice != "none") {
       response <- apply_character_voice(response, async_req$voice)
       attr(response, "voice") <- async_req$voice
+    }
+    
+    # Store context awareness info for output
+    if (!is.null(async_req$context) && async_req$context) {
+      attr(response, "context_aware") <- TRUE
     }
     
     # Print formatted response

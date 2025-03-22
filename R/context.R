@@ -1,0 +1,929 @@
+#' Context Analyzer Class
+#'
+#' @description R6 Class for analyzing R environment context
+#'
+#' @importFrom R6 R6Class
+#' @importFrom utils head object.size
+#' @keywords internal
+ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
+  public = list(
+    #' @field context_data A list containing analyzed context data
+    context_data = NULL,
+    
+    #' @field privacy_settings A list containing privacy configuration
+    privacy_settings = NULL,
+    
+    #' @description Initialize a new ContextAnalyzer
+    #' @param privacy_settings List of privacy settings
+    initialize = function(privacy_settings = NULL) {
+      self$privacy_settings <- privacy_settings %||% list(
+        analyze_data_frames = TRUE,
+        analyze_packages = TRUE,
+        analyze_history = TRUE,
+        anonymize_data = TRUE,
+        max_rows_sample = 5,
+        max_cols_sample = 5,
+        include_row_count = TRUE,
+        include_class_info = TRUE,
+        include_column_types = TRUE,
+        max_history_commands = 10
+      )
+      
+      self$context_data <- list(
+        data_frames = list(),
+        active_packages = character(),
+        recent_functions = character(),
+        command_history = character(),
+        environment_info = list(),
+        relevance_scores = list()
+      )
+      
+      invisible(self)
+    },
+    
+    #' @description Analyze the current R environment
+    #' @return Self (for method chaining)
+    analyze_environment = function() {
+      # Respect privacy settings
+      if (self$privacy_settings$analyze_data_frames) {
+        self$analyze_data_frames()
+      }
+      
+      if (self$privacy_settings$analyze_packages) {
+        self$analyze_packages()
+      }
+      
+      if (self$privacy_settings$analyze_history) {
+        self$analyze_command_history()
+      }
+      
+      # Analyze general environment info regardless of settings
+      self$analyze_environment_info()
+      
+      invisible(self)
+    },
+    
+    #' @description Analyze data frames in the global environment
+    #' @return Self (for method chaining)
+    analyze_data_frames = function() {
+      # Get all objects in global environment
+      all_objects <- ls(envir = .GlobalEnv)
+      
+      # Filter to keep only data frames
+      data_frames <- list()
+      
+      for (obj_name in all_objects) {
+        obj <- get(obj_name, envir = .GlobalEnv)
+        
+        # Check if object is a data frame or similar structure
+        if (is.data.frame(obj) || 
+            (requireNamespace("tibble", quietly = TRUE) && tibble::is_tibble(obj)) ||
+            is.matrix(obj)) {
+          
+          # Basic info about the object
+          df_info <- list(
+            name = obj_name,
+            rows = nrow(obj),
+            cols = ncol(obj),
+            size_bytes = utils::object.size(obj),
+            column_names = names(obj)
+          )
+          
+          # Add column types if requested
+          if (self$privacy_settings$include_column_types) {
+            if (is.data.frame(obj) || (requireNamespace("tibble", quietly = TRUE) && tibble::is_tibble(obj))) {
+              df_info$column_types <- vapply(obj, function(x) class(x)[1], character(1))
+            } else if (is.matrix(obj)) {
+              df_info$column_types <- rep(typeof(obj), ncol(obj))
+              names(df_info$column_types) <- colnames(obj)
+            }
+          }
+          
+          # Include class information if requested
+          if (self$privacy_settings$include_class_info) {
+            df_info$class <- class(obj)
+          }
+          
+          # Add data sample if anonymization is disabled
+          if (!self$privacy_settings$anonymize_data) {
+            # Get a small sample of the data
+            max_rows <- min(self$privacy_settings$max_rows_sample, nrow(obj))
+            max_cols <- min(self$privacy_settings$max_cols_sample, ncol(obj))
+            
+            if (max_rows > 0 && max_cols > 0) {
+              sample_rows <- seq_len(max_rows)
+              sample_cols <- seq_len(max_cols)
+              
+              if (is.data.frame(obj) || (requireNamespace("tibble", quietly = TRUE) && tibble::is_tibble(obj))) {
+                df_info$data_sample <- obj[sample_rows, sample_cols, drop = FALSE]
+              } else if (is.matrix(obj)) {
+                df_info$data_sample <- obj[sample_rows, sample_cols, drop = FALSE]
+              }
+            }
+          }
+          
+          # Store the information
+          data_frames[[obj_name]] <- df_info
+        }
+      }
+      
+      self$context_data$data_frames <- data_frames
+      invisible(self)
+    },
+    
+    #' @description Analyze packages and recently used functions
+    #' @return Self (for method chaining)
+    analyze_packages = function() {
+      # Get currently attached packages
+      pkg_list <- search()
+      pkg_list <- pkg_list[grepl("^package:", pkg_list)]
+      pkg_list <- sub("^package:", "", pkg_list)
+      
+      # Store package list
+      self$context_data$active_packages <- pkg_list
+      
+      # Track recently used functions from command history if allowed
+      if (self$privacy_settings$analyze_history) {
+        # This will be populated by analyze_command_history
+        # Just preparing the structure here
+      }
+      
+      invisible(self)
+    },
+    
+    #' @description Analyze command history
+    #' @return Self (for method chaining)
+    analyze_command_history = function() {
+      # Try to get command history
+      history <- tryCatch({
+        # Get command history, filtering out tldrAI calls to avoid noise
+        hist_file <- tempfile()
+        utils::savehistory(hist_file)
+        history_lines <- readLines(hist_file, warn = FALSE)
+        unlink(hist_file)
+        
+        # Remove tldrAI function calls to avoid noise
+        history_lines <- history_lines[!grepl("^tldr(\\(|_)", history_lines)]
+        
+        # Get most recent commands, respecting the max limit
+        max_count <- min(self$privacy_settings$max_history_commands, length(history_lines))
+        recent_commands <- tail(history_lines, max_count)
+        
+        recent_commands
+      }, error = function(e) {
+        character(0)  # Return empty if there's an error
+      })
+      
+      # Store command history
+      self$context_data$command_history <- history
+      
+      # Extract function calls from history
+      if (length(history) > 0) {
+        # Simple regex to extract function calls like function_name(...)
+        func_calls <- regmatches(history, regexpr("[[:alnum:]_.]+\\(", history))
+        func_calls <- sub("\\($", "", func_calls)
+        
+        # Store the function calls with duplicates removed
+        self$context_data$recent_functions <- unique(func_calls)
+      }
+      
+      invisible(self)
+    },
+    
+    #' @description Analyze general environment information
+    #' @return Self (for method chaining)
+    analyze_environment_info = function() {
+      # Get R version and platform
+      self$context_data$environment_info$r_version <- getRversion()
+      self$context_data$environment_info$platform <- R.version$platform
+      
+      # Check for common data analysis frameworks
+      self$context_data$environment_info$has_tidyverse <- 
+        requireNamespace("tidyverse", quietly = TRUE) || 
+        (requireNamespace("dplyr", quietly = TRUE) && 
+         requireNamespace("ggplot2", quietly = TRUE))
+      
+      self$context_data$environment_info$has_data_table <- 
+        requireNamespace("data.table", quietly = TRUE)
+      
+      invisible(self)
+    },
+    
+    #' @description Score data frames for relevance to a given function
+    #' @param func_name Name of the function
+    #' @param func_metadata Metadata about the function
+    #' @return Named vector of relevance scores
+    score_data_frame_relevance = function(func_name, func_metadata) {
+      if (length(self$context_data$data_frames) == 0) {
+        return(numeric(0))
+      }
+      
+      # Initialize scores
+      scores <- numeric(length(self$context_data$data_frames))
+      names(scores) <- names(self$context_data$data_frames)
+      
+      # Extract package info
+      func_package <- func_metadata$package
+      
+      # Get function arguments
+      func_args <- func_metadata$args
+      
+      # Score each data frame based on various relevance signals
+      for (df_name in names(self$context_data$data_frames)) {
+        df_info <- self$context_data$data_frames[[df_name]]
+        score <- 0
+        
+        # Score based on column types for data manipulation functions
+        if (func_package %in% c("dplyr", "tidyr", "data.table", "base", "stats")) {
+          score <- score + 2
+          
+          # Score even higher for data frames with reasonable size
+          if (df_info$rows > 0 && df_info$rows < 1000 && df_info$cols < 50) {
+            score <- score + 1
+          }
+        }
+        
+        # Score higher for plotting functions if data frame has numeric columns
+        if (func_package %in% c("ggplot2", "graphics", "lattice")) {
+          # Check if data frame has numeric columns for plotting
+          if (is.data.frame(df_info$column_types)) {
+            has_numeric <- any(sapply(df_info$column_types, function(x) x %in% c("numeric", "integer")))
+            if (has_numeric) {
+              score <- score + 3
+            }
+          }
+        }
+        
+        # Score based on recent usage
+        if (df_name %in% self$extract_objects_from_history()) {
+          score <- score + 2
+        }
+        
+        scores[df_name] <- score
+      }
+      
+      # Store the scores
+      self$context_data$relevance_scores[[func_name]] <- scores
+      
+      # Return in descending order of relevance
+      sort(scores, decreasing = TRUE)
+    },
+    
+    #' @description Extract objects used in recent commands
+    #' @return Character vector of object names
+    extract_objects_from_history = function() {
+      if (length(self$context_data$command_history) == 0) {
+        return(character(0))
+      }
+      
+      # Get all objects in global environment
+      all_objects <- ls(envir = .GlobalEnv)
+      
+      # Find which objects appear in command history
+      used_objects <- character(0)
+      
+      for (obj in all_objects) {
+        # Create a pattern that matches the object as a distinct word/symbol
+        pattern <- paste0("\\b", obj, "\\b")
+        if (any(grepl(pattern, self$context_data$command_history))) {
+          used_objects <- c(used_objects, obj)
+        }
+      }
+      
+      used_objects
+    },
+    
+    #' @description Generate function examples using actual data
+    #' @param func_name Name of the function
+    #' @param func_metadata Metadata about the function
+    #' @param top_n Number of top data frames to use
+    #' @return List of example strings
+    generate_contextual_examples = function(func_name, func_metadata, top_n = 2) {
+      # Score data frames for relevance
+      relevance_scores <- self$score_data_frame_relevance(func_name, func_metadata)
+      
+      if (length(relevance_scores) == 0) {
+        return(character(0))
+      }
+      
+      # Get top data frames
+      top_dfs <- names(head(relevance_scores, top_n))
+      
+      # Generate examples based on function and data frames
+      examples <- character(0)
+      
+      # Extract package and function name
+      func_package <- func_metadata$package
+      
+      # Generate examples based on package and available data
+      for (df_name in top_dfs) {
+        df_info <- self$context_data$data_frames[[df_name]]
+        
+        if (func_package == "dplyr" && func_name %in% c("filter", "select", "mutate", "summarise", "group_by")) {
+          examples <- c(examples, self$generate_dplyr_example(func_name, df_name, df_info))
+        } else if (func_package == "ggplot2" && func_name %in% c("ggplot", "geom_point", "geom_line", "geom_bar", "geom_histogram")) {
+          examples <- c(examples, self$generate_ggplot_example(func_name, df_name, df_info))
+        } else if (func_package == "base" && func_name %in% c("mean", "median", "sum", "min", "max", "sd", "var")) {
+          examples <- c(examples, self$generate_stats_example(func_name, df_name, df_info))
+        } else if (func_package == "stats" && func_name %in% c("lm", "glm", "t.test", "cor", "cor.test", "anova")) {
+          examples <- c(examples, self$generate_stats_model_example(func_name, df_name, df_info))
+        } else {
+          # Generic example
+          examples <- c(examples, sprintf("# Using your data frame '%s'\n%s(%s)", df_name, func_name, df_name))
+        }
+      }
+      
+      examples
+    },
+    
+    #' @description Generate example for dplyr functions
+    #' @param func_name Name of the function
+    #' @param df_name Name of the data frame
+    #' @param df_info Information about the data frame
+    #' @return Example string
+    generate_dplyr_example = function(func_name, df_name, df_info) {
+      # Get column names
+      col_names <- df_info$column_names
+      
+      if (length(col_names) == 0) {
+        return(sprintf("# Using your data frame '%s'\n%s(%s)", df_name, func_name, df_name))
+      }
+      
+      # For filter
+      if (func_name == "filter") {
+        # Select a column for filtering
+        col <- col_names[1]
+        return(sprintf("# Filter rows in your '%s' data frame\n%s |> %s(%s > mean(%s, na.rm = TRUE))", 
+                      df_name, df_name, func_name, col, col))
+      }
+      
+      # For select
+      if (func_name == "select") {
+        cols <- paste(head(col_names, min(3, length(col_names))), collapse = ", ")
+        return(sprintf("# Select specific columns from your '%s' data frame\n%s |> %s(%s)", 
+                      df_name, df_name, func_name, cols))
+      }
+      
+      # For mutate
+      if (func_name == "mutate") {
+        if (length(col_names) >= 2) {
+          return(sprintf("# Add a new column to your '%s' data frame\n%s |> %s(new_var = %s + %s)", 
+                        df_name, df_name, func_name, col_names[1], col_names[2]))
+        } else {
+          return(sprintf("# Add a new column to your '%s' data frame\n%s |> %s(new_var = %s * 2)", 
+                        df_name, df_name, func_name, col_names[1]))
+        }
+      }
+      
+      # For group_by and summarise
+      if (func_name %in% c("group_by", "summarise")) {
+        if (length(col_names) >= 2) {
+          if (func_name == "group_by") {
+            return(sprintf("# Group your '%s' data frame by '%s'\n%s |> %s(%s)", 
+                          df_name, col_names[1], df_name, func_name, col_names[1]))
+          } else { # summarise
+            return(sprintf("# Summarize your grouped '%s' data frame\n%s |> group_by(%s) |> %s(avg_%s = mean(%s, na.rm = TRUE))", 
+                          df_name, df_name, col_names[1], func_name, col_names[2], col_names[2]))
+          }
+        }
+      }
+      
+      # Generic fallback
+      sprintf("# Apply %s to your '%s' data frame\n%s |> %s()", func_name, df_name, df_name, func_name)
+    },
+    
+    #' @description Generate example for ggplot2 functions
+    #' @param func_name Name of the function
+    #' @param df_name Name of the data frame
+    #' @param df_info Information about the data frame
+    #' @return Example string
+    generate_ggplot_example = function(func_name, df_name, df_info) {
+      # Get column names
+      col_names <- df_info$column_names
+      
+      if (length(col_names) == 0) {
+        return(sprintf("# Create a plot using your '%s' data frame\nggplot(%s, aes(x = column1)) + geom_histogram()", 
+                      df_name, df_name))
+      }
+      
+      # For ggplot base function
+      if (func_name == "ggplot") {
+        if (length(col_names) >= 2) {
+          return(sprintf("# Create a scatter plot using your '%s' data frame\nggplot(%s, aes(x = %s, y = %s)) + geom_point()", 
+                        df_name, df_name, col_names[1], col_names[2]))
+        } else {
+          return(sprintf("# Create a histogram using your '%s' data frame\nggplot(%s, aes(x = %s)) + geom_histogram()", 
+                        df_name, df_name, col_names[1]))
+        }
+      }
+      
+      # For geom_point
+      if (func_name == "geom_point") {
+        if (length(col_names) >= 2) {
+          return(sprintf("# Create a scatter plot using your '%s' data frame\nggplot(%s, aes(x = %s, y = %s)) + %s()", 
+                        df_name, df_name, col_names[1], col_names[2], func_name))
+        }
+      }
+      
+      # For geom_line
+      if (func_name == "geom_line") {
+        if (length(col_names) >= 2) {
+          return(sprintf("# Create a line plot using your '%s' data frame\nggplot(%s, aes(x = %s, y = %s)) + %s()", 
+                        df_name, df_name, col_names[1], col_names[2], func_name))
+        }
+      }
+      
+      # For geom_bar
+      if (func_name == "geom_bar") {
+        return(sprintf("# Create a bar plot using your '%s' data frame\nggplot(%s, aes(x = %s)) + %s()", 
+                      df_name, df_name, col_names[1], func_name))
+      }
+      
+      # For geom_histogram
+      if (func_name == "geom_histogram") {
+        return(sprintf("# Create a histogram using your '%s' data frame\nggplot(%s, aes(x = %s)) + %s(bins = 30)", 
+                      df_name, df_name, col_names[1], func_name))
+      }
+      
+      # Generic fallback
+      sprintf("# Create a plot using your '%s' data frame\nggplot(%s, aes(x = %s)) + %s()", 
+              df_name, df_name, col_names[1], func_name)
+    },
+    
+    #' @description Generate example for basic statistics functions
+    #' @param func_name Name of the function
+    #' @param df_name Name of the data frame
+    #' @param df_info Information about the data frame
+    #' @return Example string
+    generate_stats_example = function(func_name, df_name, df_info) {
+      # Get column names
+      col_names <- df_info$column_names
+      
+      if (length(col_names) == 0) {
+        return(sprintf("# Calculate %s from your '%s' data frame\n%s(%s$column_name, na.rm = TRUE)", 
+                      func_name, df_name, func_name, df_name))
+      }
+      
+      # Basic statistics on a column
+      return(sprintf("# Calculate %s from your '%s' data frame\n%s(%s$%s, na.rm = TRUE)", 
+                    func_name, df_name, func_name, df_name, col_names[1]))
+    },
+    
+    #' @description Generate example for statistical modeling functions
+    #' @param func_name Name of the function
+    #' @param df_name Name of the data frame
+    #' @param df_info Information about the data frame
+    #' @return Example string
+    generate_stats_model_example = function(func_name, df_name, df_info) {
+      # Get column names
+      col_names <- df_info$column_names
+      
+      if (length(col_names) < 2) {
+        return(sprintf("# Fit a model to your '%s' data frame\n%s(y ~ x, data = %s)", 
+                      df_name, func_name, df_name))
+      }
+      
+      # For linear models
+      if (func_name == "lm") {
+        return(sprintf("# Fit a linear model to your '%s' data frame\n%s(%s ~ %s, data = %s)", 
+                      df_name, func_name, col_names[2], col_names[1], df_name))
+      }
+      
+      # For generalized linear models
+      if (func_name == "glm") {
+        return(sprintf("# Fit a logistic regression model to your '%s' data frame\n%s(%s ~ %s, data = %s, family = binomial())", 
+                      df_name, func_name, col_names[2], col_names[1], df_name))
+      }
+      
+      # For t-tests
+      if (func_name == "t.test") {
+        return(sprintf("# Perform a t-test on your '%s' data frame\n%s(%s$%s, %s$%s)", 
+                      df_name, func_name, df_name, col_names[1], df_name, col_names[2]))
+      }
+      
+      # For correlation tests
+      if (func_name %in% c("cor", "cor.test")) {
+        return(sprintf("# Calculate correlation between columns in your '%s' data frame\n%s(%s$%s, %s$%s, use = 'complete.obs')", 
+                      df_name, func_name, df_name, col_names[1], df_name, col_names[2]))
+      }
+      
+      # Generic fallback
+      sprintf("# Apply %s to your '%s' data frame\n%s(formula, data = %s)", 
+              func_name, df_name, func_name, df_name)
+    },
+    
+    #' @description Format context data for inclusion in AI prompt
+    #' @param func_name Name of the function
+    #' @param func_metadata Metadata about the function
+    #' @return Formatted context string
+    format_context_for_prompt = function(func_name, func_metadata) {
+      context_string <- "USER ENVIRONMENT CONTEXT:\n"
+      
+      # Add active packages
+      if (length(self$context_data$active_packages) > 0) {
+        context_string <- paste0(context_string, "Active packages: ", 
+                               paste(self$context_data$active_packages, collapse = ", "), "\n")
+      }
+      
+      # Add recent functions
+      if (length(self$context_data$recent_functions) > 0) {
+        context_string <- paste0(context_string, "Recently used functions: ", 
+                               paste(head(self$context_data$recent_functions, 5), collapse = ", "), "\n")
+      }
+      
+      # Add data frames info
+      if (length(self$context_data$data_frames) > 0) {
+        # Score data frames for relevance to this function
+        relevance_scores <- self$score_data_frame_relevance(func_name, func_metadata)
+        
+        # Get top data frames (max 3)
+        top_dfs <- names(head(sort(relevance_scores, decreasing = TRUE), 3))
+        
+        context_string <- paste0(context_string, "Available data frames (most relevant first):\n")
+        
+        for (df_name in top_dfs) {
+          df_info <- self$context_data$data_frames[[df_name]]
+          
+          # Basic info
+          df_context <- sprintf("- %s: %d rows × %d columns", 
+                              df_name, df_info$rows, df_info$cols)
+          
+          # Add column names
+          if (length(df_info$column_names) > 0) {
+            col_str <- paste(df_info$column_names, collapse = ", ")
+            if (nchar(col_str) > 100) {
+              # Truncate long column lists
+              visible_cols <- df_info$column_names[1:min(5, length(df_info$column_names))]
+              col_str <- paste0(paste(visible_cols, collapse = ", "), 
+                              ", ... and ", length(df_info$column_names) - 5, " more columns")
+            }
+            df_context <- paste0(df_context, "\n  Columns: ", col_str)
+          }
+          
+          # Add column types if available
+          if (!is.null(df_info$column_types) && length(df_info$column_types) > 0) {
+            # Select a few column types to display
+            sample_cols <- names(df_info$column_types)[1:min(3, length(df_info$column_types))]
+            type_str <- paste(
+              sapply(sample_cols, function(col) sprintf("%s: %s", col, df_info$column_types[col])),
+              collapse = ", "
+            )
+            
+            if (length(df_info$column_types) > 3) {
+              type_str <- paste0(type_str, ", ...")
+            }
+            
+            df_context <- paste0(df_context, "\n  Types: ", type_str)
+          }
+          
+          context_string <- paste0(context_string, df_context, "\n")
+        }
+      }
+      
+      # Remove the last newline
+      context_string <- substr(context_string, 1, nchar(context_string) - 1)
+      
+      context_string
+    },
+    
+    #' @description Suggest next logical steps based on context
+    #' @param func_name Name of the function
+    #' @param func_metadata Metadata about the function
+    #' @return Character vector of suggested next steps
+    suggest_next_steps = function(func_name, func_metadata) {
+      suggestions <- character(0)
+      
+      # Get package and function info
+      func_package <- func_metadata$package
+      
+      # Suggest based on package and function
+      if (func_package == "dplyr") {
+        if (func_name %in% c("filter", "select", "mutate")) {
+          suggestions <- c(suggestions, 
+                         "Next steps: Consider piping the result to other dplyr functions like summarise() or group_by()")
+        } else if (func_name == "group_by") {
+          suggestions <- c(suggestions, 
+                         "Next steps: After grouping, use summarise() to calculate group statistics")
+        }
+      } else if (func_package == "ggplot2") {
+        if (func_name == "ggplot" || grepl("^geom_", func_name)) {
+          suggestions <- c(suggestions, 
+                         "Next steps: Customize your plot with theme(), labs(), or add more geoms")
+        }
+      } else if (func_package == "stats" && func_name %in% c("lm", "glm")) {
+        suggestions <- c(suggestions, 
+                       "Next steps: Examine the model with summary(), plot diagnostics with plot(), or make predictions with predict()")
+      }
+      
+      # Add general workflow suggestions based on recent function usage
+      recent_pkgs <- unique(sapply(self$context_data$recent_functions, function(func) {
+        find_package(func)
+      }))
+      
+      if ("readr" %in% recent_pkgs || "data.table" %in% recent_pkgs) {
+        suggestions <- c(suggestions, 
+                       "Workflow hint: After importing data, inspect it with glimpse() or str() before analysis")
+      }
+      
+      suggestions
+    }
+  ),
+  
+  private = list(
+    # Null-coalescing operator as a private helper
+    `%||%` = function(x, y) {
+      if (is.null(x)) y else x
+    }
+  )
+)
+
+#' Find the package that a function belongs to
+#'
+#' @param func_name The name of the function (can include or exclude parentheses)
+#'
+#' @return Character string with the package name
+#' @keywords internal
+find_package <- function(func_name) {
+  # Remove parentheses if present
+  func_name <- sub("\\(.*$", "", func_name)
+  
+  # Look for the function in all loaded namespaces
+  for (pkg in loadedNamespaces()) {
+    if (exists(func_name, envir = asNamespace(pkg), inherits = FALSE)) {
+      return(pkg)
+    }
+  }
+  
+  # Check if it's in base R
+  if (exists(func_name, envir = baseenv(), inherits = FALSE)) {
+    return("base")
+  }
+  
+  # Default to unknown
+  "unknown"
+}
+
+#' Null-coalescing operator
+#' @keywords internal
+`%||%` <- function(x, y) {
+  if (is.null(x)) y else x
+}
+
+#' Configure context awareness settings for tldrAI
+#'
+#' @param enable_context_awareness Logical indicating whether to enable context awareness
+#' @param analyze_data_frames Logical indicating whether to analyze data frames
+#' @param analyze_packages Logical indicating whether to analyze active packages
+#' @param analyze_history Logical indicating whether to analyze command history
+#' @param anonymize_data Logical indicating whether to anonymize data samples
+#' @param max_rows_sample Integer specifying maximum rows to sample from data frames
+#' @param max_cols_sample Integer specifying maximum columns to sample from data frames
+#' @param include_row_count Logical indicating whether to include row counts in context
+#' @param include_class_info Logical indicating whether to include class information
+#' @param include_column_types Logical indicating whether to include column types
+#' @param max_history_commands Integer specifying maximum number of history commands to analyze
+#'
+#' @return Invisibly returns the updated configuration
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' tldr_context_config(enable_context_awareness = TRUE)
+#' tldr_context_config(analyze_data_frames = TRUE, anonymize_data = TRUE)
+#' tldr_context_config(max_rows_sample = 3, max_cols_sample = 5)
+#' tldr_context_config(analyze_history = FALSE)  # Disable command history analysis
+#' }
+tldr_context_config <- function(
+  enable_context_awareness = NULL,
+  analyze_data_frames = NULL,
+  analyze_packages = NULL,
+  analyze_history = NULL,
+  anonymize_data = NULL,
+  max_rows_sample = NULL,
+  max_cols_sample = NULL,
+  include_row_count = NULL,
+  include_class_info = NULL,
+  include_column_types = NULL,
+  max_history_commands = NULL
+) {
+  # Get current config
+  config <- get_config_all()
+  
+  # Initialize context_settings if it doesn't exist
+  if (is.null(config$context_settings)) {
+    config$context_settings <- list(
+      enable_context_awareness = TRUE,
+      analyze_data_frames = TRUE,
+      analyze_packages = TRUE,
+      analyze_history = TRUE,
+      anonymize_data = TRUE,
+      max_rows_sample = 5,
+      max_cols_sample = 5,
+      include_row_count = TRUE,
+      include_class_info = TRUE,
+      include_column_types = TRUE,
+      max_history_commands = 10
+    )
+  }
+  
+  # Update settings with non-NULL values
+  if (!is.null(enable_context_awareness)) {
+    if (!is.logical(enable_context_awareness)) {
+      stop("enable_context_awareness must be a logical value (TRUE or FALSE)")
+    }
+    config$context_settings$enable_context_awareness <- enable_context_awareness
+  }
+  
+  if (!is.null(analyze_data_frames)) {
+    if (!is.logical(analyze_data_frames)) {
+      stop("analyze_data_frames must be a logical value (TRUE or FALSE)")
+    }
+    config$context_settings$analyze_data_frames <- analyze_data_frames
+  }
+  
+  if (!is.null(analyze_packages)) {
+    if (!is.logical(analyze_packages)) {
+      stop("analyze_packages must be a logical value (TRUE or FALSE)")
+    }
+    config$context_settings$analyze_packages <- analyze_packages
+  }
+  
+  if (!is.null(analyze_history)) {
+    if (!is.logical(analyze_history)) {
+      stop("analyze_history must be a logical value (TRUE or FALSE)")
+    }
+    config$context_settings$analyze_history <- analyze_history
+  }
+  
+  if (!is.null(anonymize_data)) {
+    if (!is.logical(anonymize_data)) {
+      stop("anonymize_data must be a logical value (TRUE or FALSE)")
+    }
+    config$context_settings$anonymize_data <- anonymize_data
+  }
+  
+  if (!is.null(max_rows_sample)) {
+    if (!is.numeric(max_rows_sample) || max_rows_sample < 0 || max_rows_sample != as.integer(max_rows_sample)) {
+      stop("max_rows_sample must be a non-negative integer")
+    }
+    config$context_settings$max_rows_sample <- as.integer(max_rows_sample)
+  }
+  
+  if (!is.null(max_cols_sample)) {
+    if (!is.numeric(max_cols_sample) || max_cols_sample < 0 || max_cols_sample != as.integer(max_cols_sample)) {
+      stop("max_cols_sample must be a non-negative integer")
+    }
+    config$context_settings$max_cols_sample <- as.integer(max_cols_sample)
+  }
+  
+  if (!is.null(include_row_count)) {
+    if (!is.logical(include_row_count)) {
+      stop("include_row_count must be a logical value (TRUE or FALSE)")
+    }
+    config$context_settings$include_row_count <- include_row_count
+  }
+  
+  if (!is.null(include_class_info)) {
+    if (!is.logical(include_class_info)) {
+      stop("include_class_info must be a logical value (TRUE or FALSE)")
+    }
+    config$context_settings$include_class_info <- include_class_info
+  }
+  
+  if (!is.null(include_column_types)) {
+    if (!is.logical(include_column_types)) {
+      stop("include_column_types must be a logical value (TRUE or FALSE)")
+    }
+    config$context_settings$include_column_types <- include_column_types
+  }
+  
+  if (!is.null(max_history_commands)) {
+    if (!is.numeric(max_history_commands) || max_history_commands < 0 || max_history_commands != as.integer(max_history_commands)) {
+      stop("max_history_commands must be a non-negative integer")
+    }
+    config$context_settings$max_history_commands <- as.integer(max_history_commands)
+  }
+  
+  # Save the updated config
+  save_config(config)
+  
+  # Print a message to confirm
+  status <- if (config$context_settings$enable_context_awareness) "enabled" else "disabled"
+  message("Context awareness is now ", status)
+  
+  invisible(config)
+}
+
+#' Test the context analyzer by showing what data it collects
+#'
+#' @return Invisibly returns the context data
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' tldr_test_context()
+#' }
+tldr_test_context <- function() {
+  # Get current config
+  config <- get_config_all()
+  
+  # Initialize the context analyzer with current settings
+  context_settings <- config$context_settings %||% list(
+    enable_context_awareness = TRUE,
+    analyze_data_frames = TRUE,
+    analyze_packages = TRUE,
+    analyze_history = TRUE,
+    anonymize_data = TRUE,
+    max_rows_sample = 5,
+    max_cols_sample = 5,
+    include_row_count = TRUE,
+    include_class_info = TRUE,
+    include_column_types = TRUE,
+    max_history_commands = 10
+  )
+  
+  context_analyzer <- ContextAnalyzer$new(context_settings)
+  
+  # Analyze the environment
+  context_analyzer$analyze_environment()
+  
+  # Print the context data in a nicely formatted way
+  cat("\n")
+  cli::cli_h1("Context Analysis Summary")
+  
+  # Active packages
+  if (length(context_analyzer$context_data$active_packages) > 0) {
+    cli::cli_h2("Active Packages")
+    cat(paste(context_analyzer$context_data$active_packages, collapse = ", "), "\n\n")
+  }
+  
+  # Recent functions
+  if (length(context_analyzer$context_data$recent_functions) > 0) {
+    cli::cli_h2("Recently Used Functions")
+    cat(paste(context_analyzer$context_data$recent_functions, collapse = ", "), "\n\n")
+  }
+  
+  # Data frames
+  if (length(context_analyzer$context_data$data_frames) > 0) {
+    cli::cli_h2("Available Data Frames")
+    
+    for (df_name in names(context_analyzer$context_data$data_frames)) {
+      df_info <- context_analyzer$context_data$data_frames[[df_name]]
+      
+      cli::cli_h3(df_name)
+      cat(sprintf("Dimensions: %d rows × %d columns\n", df_info$rows, df_info$cols))
+      
+      if (length(df_info$column_names) > 0) {
+        cat("Columns: ", paste(df_info$column_names, collapse = ", "), "\n")
+      }
+      
+      if (!is.null(df_info$column_types) && length(df_info$column_types) > 0) {
+        cat("Column Types:\n")
+        for (col in names(df_info$column_types)) {
+          cat(sprintf("  - %s: %s\n", col, df_info$column_types[col]))
+        }
+      }
+      
+      if (!is.null(df_info$class)) {
+        cat("Class: ", paste(df_info$class, collapse = ", "), "\n")
+      }
+      
+      # Sample data (if available and anonymization is disabled)
+      if (!is.null(df_info$data_sample)) {
+        cat("Data Sample:\n")
+        print(df_info$data_sample)
+      }
+      
+      cat("\n")
+    }
+  }
+  
+  # Environment info
+  if (length(context_analyzer$context_data$environment_info) > 0) {
+    cli::cli_h2("Environment Information")
+    cat(sprintf("R Version: %s\n", context_analyzer$context_data$environment_info$r_version))
+    cat(sprintf("Platform: %s\n", context_analyzer$context_data$environment_info$platform))
+    
+    cat(sprintf("Tidyverse Available: %s\n", 
+               ifelse(context_analyzer$context_data$environment_info$has_tidyverse, "Yes", "No")))
+    cat(sprintf("data.table Available: %s\n", 
+               ifelse(context_analyzer$context_data$environment_info$has_data_table, "Yes", "No")))
+  }
+  
+  # Context analyzer settings
+  cli::cli_h2("Context Analyzer Settings")
+  cat(sprintf("Analyze Data Frames: %s\n", 
+             ifelse(context_analyzer$privacy_settings$analyze_data_frames, "Yes", "No")))
+  cat(sprintf("Analyze Packages: %s\n", 
+             ifelse(context_analyzer$privacy_settings$analyze_packages, "Yes", "No")))
+  cat(sprintf("Analyze History: %s\n", 
+             ifelse(context_analyzer$privacy_settings$analyze_history, "Yes", "No")))
+  cat(sprintf("Anonymize Data: %s\n", 
+             ifelse(context_analyzer$privacy_settings$anonymize_data, "Yes", "No")))
+  
+  cat("\n")
+  cat("Note: This information is what would be analyzed and potentially included in AI prompts\n")
+  cat("based on your current context awareness settings.\n")
+  
+  invisible(context_analyzer$context_data)
+}

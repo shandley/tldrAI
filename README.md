@@ -10,6 +10,9 @@
 - [Usage](#usage)
 - [Configuration](#configuration)
 - [Offline Usage](#offline-usage)
+- [Contextual Awareness](#contextual-awareness)
+  - [Privacy and Customization](#privacy-and-customization)
+  - [Testing Context Analysis](#testing-context-analysis)
 - [Performance Features](#performance-features)
   - [Asynchronous API Calls](#asynchronous-api-calls)
   - [Performance Tuning](#performance-tuning)
@@ -33,6 +36,7 @@
 
 - **Concise Help**: Get straight-to-the-point explanations focused on practical usage
 - **Examples-First**: Prioritizes realistic code examples over verbose documentation
+- **Contextual Awareness**: Provides personalized help based on your actual data and code
 - **Character Voices**: Add personality to responses with customizable character voices
 - **Multiple LLM Providers**: Support for both Claude and OpenAI APIs
 - **Provider Fallback**: Automatically switch to a fallback provider if the primary one fails
@@ -44,6 +48,7 @@
 - **Asynchronous Requests**: Make non-blocking API calls to improve performance
 - **Intelligent Retries**: Exponential backoff and smart retry logic for reliability
 - **Performance Tuning**: Configurable timeouts and retry attempts
+- **Privacy Controls**: Configure what data is shared with AI models
 
 ## Usage
 
@@ -65,9 +70,23 @@ tldr("stats::sd", verbose = TRUE, examples = 3)
 tldr("ggplot2::ggplot", examples = 3)
 tldr("dplyr::filter", provider = "openai")
 
+# Use contextual awareness for personalized examples
+tldr("filter", context = TRUE)
+tldr("ggplot", context = TRUE)
+
 # Use a character voice for more personality
 tldr("mean", voice = "enthusiastic_explorer")
 tldr("sd", voice = "cynical_detective")
+
+# Combine contextual awareness with character voices
+tldr("summarise", context = TRUE, voice = "eccentric_scientist")
+
+# Configure contextual awareness settings
+tldr_context_config(enable_context_awareness = TRUE)  # Enable by default
+tldr_context_config(anonymize_data = TRUE)  # Protect sensitive data
+
+# See what context data would be collected
+tldr_test_context()
 
 # See available character voices
 tldr_list_voices()
@@ -132,6 +151,21 @@ tldr_config(
   timeout = 60,                       # API request timeout in seconds
   max_retries = 3                     # Maximum number of retry attempts
 )
+
+# Configure contextual awareness separately
+tldr_context_config(
+  enable_context_awareness = TRUE,    # Enable contextual awareness by default
+  analyze_data_frames = TRUE,         # Analyze data frames in the environment
+  analyze_packages = TRUE,            # Analyze loaded packages
+  analyze_history = TRUE,             # Analyze command history
+  anonymize_data = TRUE,              # Don't include actual data samples
+  max_rows_sample = 5,                # Maximum rows to sample
+  max_cols_sample = 5,                # Maximum columns to sample
+  include_row_count = TRUE,           # Include row counts in context
+  include_class_info = TRUE,          # Include class information
+  include_column_types = TRUE,        # Include column types in context
+  max_history_commands = 10           # Maximum history commands to analyze
+)
 ```
 
 ## Offline Usage
@@ -148,6 +182,72 @@ tldr("mean")
 # Disable offline mode when you're back online
 tldr_offline(FALSE)
 ```
+
+## Contextual Awareness
+
+The contextual awareness feature helps `tldrAI` provide personalized help based on your actual R environment. When enabled, it analyzes your current data frames, loaded packages, and recent commands to tailor examples and explanations to your specific context.
+
+```r
+# Use contextual awareness for a single query
+tldr("filter", context = TRUE)
+
+# Enable contextual awareness for all queries by default
+tldr_context_config(enable_context_awareness = TRUE)
+
+# Now all tldr() calls will use contextual awareness
+tldr("ggplot")  # Will provide examples using your actual data frames
+
+# You can still override the default for a specific call
+tldr("mean", context = FALSE)  # Disable context for this specific call
+```
+
+When contextual awareness is enabled, `tldrAI` will:
+
+1. **Analyze your data frames** to understand their structure, column names, and data types
+2. **Examine loaded packages** to provide examples that work with your current environment
+3. **Review recent command history** to suggest logical next steps in your workflow
+4. **Generate examples** using your actual data structures instead of generic examples
+5. **Suggest workflow patterns** based on your usage patterns
+
+### Privacy and Customization
+
+You can customize what information is analyzed and included in prompts to the AI model:
+
+```r
+# Configure privacy settings
+tldr_context_config(
+  analyze_data_frames = TRUE,    # Whether to analyze data frames
+  analyze_packages = TRUE,       # Whether to analyze loaded packages
+  analyze_history = TRUE,        # Whether to analyze command history
+  anonymize_data = TRUE,         # Whether to anonymize data (recommended)
+  max_rows_sample = 3,           # Maximum rows to sample
+  max_cols_sample = 5            # Maximum columns to sample
+)
+```
+
+By default, data anonymization is enabled, which means:
+
+- Actual data values from your data frames are never sent to the AI
+- Only structural information like column names, data types, and dimensions are included
+- Command history is filtered to remove potentially sensitive information
+
+### Testing Context Analysis
+
+You can see exactly what information would be collected and sent to the AI model:
+
+```r
+# View a summary of what context data would be collected
+tldr_test_context()
+```
+
+This will display a report showing:
+
+- What data frames were detected and their structure
+- What packages are loaded
+- What recent functions were used
+- What environment information was captured
+
+This is helpful for understanding what information shapes the contextual examples and for verifying that sensitive data is not being shared.
 
 ## Performance Features
 
