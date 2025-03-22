@@ -167,6 +167,7 @@ get_function_metadata <- function(func_name, package = NULL) {
         } else {
           warning("Multiple functions named '", func_name, "' found. Using '", pkg_guess, "::", func_name, "'.\n",
                   "For more precise results, use the package::function notation (e.g., 'packagename::", func_name, "')")
+        }
       }
     } else {
       func_name <- matches[1]

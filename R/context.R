@@ -350,6 +350,10 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
         else if (func_package == "survival" && func_name %in% c("Surv", "survfit", "coxph")) {
           examples <- c(examples, self$generate_survival_example(func_name, df_name, df_info))
         }
+        # data.table functions
+        else if (func_package == "data.table" && func_name %in% c("[", "data.table", "setkey", "setDT", "setDF", "fread", "fwrite", "melt", "dcast", "rbindlist")) {
+          examples <- c(examples, self$generate_data_table_example(func_name, df_name, df_info))
+        }
         # Generic examples for any other function
         else {
           # Generic example
@@ -1055,6 +1059,139 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
       # Generic fallback
       sprintf("# Apply %s to your '%s' data frame\n%s(formula, data = %s)", 
               func_name, df_name, func_name, df_name)
+    },
+    
+    #' @description Generate example for data.table functions
+    #' @param func_name Name of the function
+    #' @param df_name Name of the data frame
+    #' @param df_info Information about the data frame
+    #' @return Example string
+    generate_data_table_example = function(func_name, df_name, df_info) {
+      # Get column names and types
+      col_names <- df_info$column_names
+      col_types <- df_info$column_types
+      
+      if (length(col_names) == 0) {
+        return(sprintf("# Using your data frame '%s' with data.table\nlibrary(data.table)\ndt <- as.data.table(%s)", df_name, df_name))
+      }
+      
+      # Find numeric, character and date columns if column types are available
+      numeric_cols <- character(0)
+      char_cols <- character(0)
+      date_cols <- character(0)
+      logical_cols <- character(0)
+      
+      if (!is.null(col_types) && length(col_types) > 0) {
+        for (i in seq_along(col_types)) {
+          col <- names(col_types)[i]
+          type <- col_types[i]
+          
+          if (type %in% c("numeric", "integer", "double")) {
+            numeric_cols <- c(numeric_cols, col)
+          } else if (type %in% c("character", "factor")) {
+            char_cols <- c(char_cols, col)
+          } else if (type %in% c("Date", "POSIXct", "POSIXlt")) {
+            date_cols <- c(date_cols, col)
+          } else if (type == "logical") {
+            logical_cols <- c(logical_cols, col)
+          }
+        }
+      }
+      
+      # For data.table's special [ function (the core of data.table)
+      if (func_name == "[") {
+        # Basic filtering with i
+        if (length(char_cols) > 0) {
+          # Character column for grouping
+          return(sprintf("# Query your '%s' data frame using data.table syntax\nlibrary(data.table)\ndt <- as.data.table(%s)\ndt[%s == \"value\"]  # Filter rows\ndt[, .(%s = mean(%s)), by = %s]  # Aggregate by group", 
+                        df_name, df_name, char_cols[1], 
+                        if(length(numeric_cols) > 0) paste0("avg_", numeric_cols[1]) else "count", 
+                        if(length(numeric_cols) > 0) numeric_cols[1] else ".N", 
+                        char_cols[1]))
+        } else if (length(numeric_cols) > 0) {
+          # Numeric column for filtering
+          return(sprintf("# Query your '%s' data frame using data.table syntax\nlibrary(data.table)\ndt <- as.data.table(%s)\ndt[%s > mean(%s)]  # Filter rows\ndt[, .(count = .N, mean_val = mean(%s))]  # Aggregate", 
+                        df_name, df_name, numeric_cols[1], numeric_cols[1], numeric_cols[1]))
+        } else {
+          # Generic example
+          return(sprintf("# Query your '%s' data frame using data.table syntax\nlibrary(data.table)\ndt <- as.data.table(%s)\ndt[1:5]  # First 5 rows\ndt[, .(count = .N)]  # Count rows", 
+                        df_name, df_name))
+        }
+      }
+      
+      # For data.table() constructor
+      if (func_name == "data.table") {
+        col_subset <- head(col_names, min(3, length(col_names)))
+        return(sprintf("# Create a data.table from your '%s' data frame\nlibrary(data.table)\ndt <- data.table(%s)", 
+                      df_name, paste(sprintf("%s = %s$%s", col_subset, df_name, col_subset), collapse = ", ")))
+      }
+      
+      # For setkey
+      if (func_name == "setkey") {
+        key_col <- if (length(char_cols) > 0) char_cols[1] else col_names[1]
+        return(sprintf("# Set a key on your '%s' data table for faster operations\nlibrary(data.table)\ndt <- as.data.table(%s)\nsetkey(dt, %s)  # Now dt[\"value\"] will be fast", 
+                      df_name, df_name, key_col))
+      }
+      
+      # For setDT
+      if (func_name == "setDT") {
+        return(sprintf("# Convert your '%s' data frame to a data.table in place\nlibrary(data.table)\n%s_copy <- %s  # Create a copy to work with\nsetDT(%s_copy)  # Now %s_copy is a data.table", 
+                      df_name, df_name, df_name, df_name, df_name))
+      }
+      
+      # For setDF
+      if (func_name == "setDF") {
+        return(sprintf("# Convert your '%s' data.table to a data.frame in place\nlibrary(data.table)\ndt <- as.data.table(%s)\nsetDF(dt)  # Now dt is a data.frame again", 
+                      df_name, df_name))
+      }
+      
+      # For fread
+      if (func_name == "fread") {
+        return(sprintf("# Read a CSV file quickly into a data.table (similar to your '%s')\nlibrary(data.table)\n# Assuming you have a file 'data.csv' with similar structure\nnew_dt <- fread(\"data.csv\")\n# Compare with your existing data\nstr(%s)\nstr(new_dt)", 
+                      df_name, df_name))
+      }
+      
+      # For fwrite
+      if (func_name == "fwrite") {
+        return(sprintf("# Write your '%s' data frame to a CSV file quickly\nlibrary(data.table)\ndt <- as.data.table(%s)\nfwrite(dt, \"output_data.csv\")", 
+                      df_name, df_name))
+      }
+      
+      # For melt (reshape from wide to long)
+      if (func_name == "melt") {
+        if (length(col_names) >= 3) {
+          id_vars <- col_names[1]
+          measure_vars <- paste(col_names[2:min(4, length(col_names))], collapse = "\", \"")
+          return(sprintf("# Reshape your '%s' data frame from wide to long format\nlibrary(data.table)\ndt <- as.data.table(%s)\nlong_dt <- melt(dt, id.vars = \"%s\", measure.vars = c(\"%s\"))", 
+                        df_name, df_name, id_vars, measure_vars))
+        } else {
+          return(sprintf("# Reshape your '%s' data frame from wide to long format\nlibrary(data.table)\ndt <- as.data.table(%s)\n# Assuming first column is the ID variable\nlong_dt <- melt(dt, id.vars = 1, measure.vars = 2:ncol(dt))", 
+                        df_name, df_name))
+        }
+      }
+      
+      # For dcast (reshape from long to wide)
+      if (func_name == "dcast") {
+        if (length(col_names) >= 3) {
+          formula <- sprintf("%s ~ %s", col_names[1], col_names[2])
+          value_var <- col_names[3]
+          return(sprintf("# Reshape your '%s' data frame from long to wide format\nlibrary(data.table)\ndt <- as.data.table(%s)\nwide_dt <- dcast(dt, %s, value.var = \"%s\")", 
+                        df_name, df_name, formula, value_var))
+        } else {
+          return(sprintf("# Reshape your '%s' data frame from long to wide format\nlibrary(data.table)\ndt <- as.data.table(%s)\n# Assuming format needs to be row_id ~ variable\nwide_dt <- dcast(dt, %s ~ variable, value.var = \"value\")", 
+                        df_name, df_name, col_names[1]))
+        }
+      }
+      
+      # For rbindlist
+      if (func_name == "rbindlist") {
+        return(sprintf("# Combine multiple data frames like your '%s' efficiently\nlibrary(data.table)\n# Create a list of similar data frames\ndf_list <- list(%s, %s[1:5,], %s[6:10,])\n# Combine them\ncombined_dt <- rbindlist(df_list)", 
+                      df_name, df_name, df_name, df_name))
+      }
+      
+      # Generic fallback
+      sprintf("# Apply data.table::%s to your '%s' data frame\nlibrary(data.table)\ndt <- as.data.table(%s)\n%s(dt)", 
+              func_name, df_name, df_name, func_name)
     },
     
     #' @description Format context data for inclusion in AI prompt
