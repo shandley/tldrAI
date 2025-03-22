@@ -3,7 +3,7 @@
 #' @param func_name The name of the function
 #' @param package The package name (optional)
 #'
-#' @return A list with function metadata
+#' @return A list with function metadata, or a special metadata object for missing packages
 #' @keywords internal
 get_function_metadata <- function(func_name, package = NULL) {
   if (get_config("debug_mode", default = FALSE)) {
@@ -16,7 +16,34 @@ get_function_metadata <- function(func_name, package = NULL) {
   # Try to get the function from specified package first
   if (!is.null(package)) {
     if (!requireNamespace(package, quietly = TRUE)) {
-      stop("Package '", package, "' is not installed or cannot be loaded")
+      # Return a special metadata object for missing packages
+      if (get_config("debug_mode", default = FALSE)) {
+        message("DEBUG: Package '", package, "' is not installed or cannot be loaded")
+      }
+      
+      # Check if the package is available on CRAN to provide installation instructions
+      is_cran_pkg <- tryCatch({
+        # Try to get package info from available.packages()
+        available_pkgs <- utils::available.packages()
+        package %in% rownames(available_pkgs)
+      }, error = function(e) {
+        # If there's an error (e.g., no internet), assume it might be on CRAN
+        TRUE
+      })
+      
+      install_cmd <- if (is_cran_pkg) {
+        paste0('install.packages("', package, '")')
+      } else {
+        paste0('# Package not found on CRAN. Try:\n# install.packages("', package, '") # If available elsewhere\n# Or check: https://github.com/search?q=', package)
+      }
+      
+      return(list(
+        name = func_name,
+        package = package,
+        missing_package = TRUE,
+        install_command = install_cmd,
+        signature = paste0(func_name, "(...)")
+      ))
     }
     
     # Check if function exists in the package
@@ -45,7 +72,17 @@ get_function_metadata <- function(func_name, package = NULL) {
         body_summary = body_str
       ))
     } else {
-      stop("Function '", func_name, "' not found in package '", package, "'")
+      # Return a special metadata object for missing functions
+      if (get_config("debug_mode", default = FALSE)) {
+        message("DEBUG: Function '", func_name, "' not found in package '", package, "'")
+      }
+      
+      return(list(
+        name = func_name,
+        package = package,
+        missing_function = TRUE,
+        signature = paste0(func_name, "(...)")
+      ))
     }
   }
   
@@ -110,8 +147,10 @@ get_function_metadata <- function(func_name, package = NULL) {
                   message("DEBUG: Using match from common package: ", func_name, " from ", pkg)
                 }
                 
-                warning("Multiple functions named '", func_name, "' found. Using the one from '", pkg, "' package.\n",
-                        "For a specific package, use the package::function notation (e.g., '", pkg, "::", func_name, "')")
+                warning("Function ambiguity detected: multiple functions named '", func_name, "' found. Using the one from '", pkg, "' package.\n\n",
+                        "To get the correct help:\n",
+                        "  * tldr('", pkg, "::", func_name, "')\n",
+                        "  * Or first load the package with library(", pkg, ")")
                 
                 func <- get(func_name, envir = pkg_namespace)
                 
@@ -138,13 +177,34 @@ get_function_metadata <- function(func_name, package = NULL) {
         
         # If no match in common packages, use the first one
         func_name <- matches[1]
+        pkg_guess <- find_package(func_name)
         
         if (get_config("debug_mode", default = FALSE)) {
           message("DEBUG: No match in common packages, using first match: ", func_name)
         }
         
-        warning("Multiple functions named '", func_name, "' found. Using '", func_name, "'.\n",
-                "For more precise results, use the package::function notation (e.g., 'packagename::", func_name, "')")
+        # Check if the function might be from ggplot2, dplyr, or other popular packages
+        suggested_packages <- c()
+        for (potential_pkg in c("ggplot2", "dplyr", "tidyr", "purrr", "stringr", "lubridate")) {
+          if (requireNamespace(potential_pkg, quietly = TRUE)) {
+            if (exists(func_name, envir = asNamespace(potential_pkg), inherits = FALSE)) {
+              suggested_packages <- c(suggested_packages, potential_pkg)
+            }
+          }
+        }
+        
+        if (length(suggested_packages) > 0) {
+          suggestions <- paste0(suggested_packages, "::", func_name)
+          suggestion_text <- paste(suggestions, collapse = "' or '")
+          warning("Function ambiguity detected: multiple functions named '", func_name, "' found. Using '", pkg_guess, "::", func_name, "'.\n\n",
+                  "To get help for a specific package's function, try:\n",
+                  "  * tldr('", suggestion_text, "')\n",
+                  "  * First load the package with library(", suggested_packages[1], ")\n\n",
+                  "Popular packages with a '", func_name, "' function: ", paste(suggested_packages, collapse = ", "))
+        } else {
+          warning("Multiple functions named '", func_name, "' found. Using '", pkg_guess, "::", func_name, "'.\n",
+                  "For more precise results, use the package::function notation (e.g., 'packagename::", func_name, "')")
+        }
       }
     } else {
       func_name <- matches[1]

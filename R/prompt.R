@@ -9,7 +9,23 @@
 #' @return Character string containing the prompt
 #' @keywords internal
 build_prompt <- function(func_name, func_metadata, verbose, examples, context_data = NULL) {
-  # Get the template
+  # Check for missing package or function
+  if (!is.null(func_metadata$missing_package) && func_metadata$missing_package) {
+    # Use a special template for missing packages
+    template <- get_missing_package_template()
+    template <- gsub("{{FUNCTION_NAME}}", func_name, template, fixed = TRUE)
+    template <- gsub("{{PACKAGE_NAME}}", func_metadata$package, template, fixed = TRUE)
+    template <- gsub("{{INSTALL_COMMAND}}", func_metadata$install_command, template, fixed = TRUE)
+    return(template)
+  } else if (!is.null(func_metadata$missing_function) && func_metadata$missing_function) {
+    # Use a special template for missing functions
+    template <- get_missing_function_template()
+    template <- gsub("{{FUNCTION_NAME}}", func_name, template, fixed = TRUE)
+    template <- gsub("{{PACKAGE_NAME}}", func_metadata$package, template, fixed = TRUE)
+    return(template)
+  }
+  
+  # For normal functions, proceed as before
   template <- get_prompt_template()
   
   # Replace placeholders with actual values
@@ -121,5 +137,99 @@ If context awareness mode is YES:
 5. If the function works with data frames, use column names from the user\'s actual data frames in examples
 
 Keep all responses concise and focused on practical usage. Prioritize examples over lengthy explanations.
+')
+}
+
+#' Get template for missing package
+#'
+#' @return Character string containing the prompt template for missing packages
+#' @keywords internal
+get_missing_package_template <- function() {
+  return('
+You are tldrAI, a tool that provides concise, practical help for R functions.
+The user has requested help with the function "{{FUNCTION_NAME}}" from the package "{{PACKAGE_NAME}}".
+
+IMPORTANT: The package "{{PACKAGE_NAME}}" is not installed on the user\'s system.
+
+Please provide a helpful response that:
+1. Informs the user that the package is not installed
+2. Gives instructions on how to install the package
+3. Provides a brief general description of what the function likely does (based on its name and the package)
+4. Suggests installation with the following command: {{INSTALL_COMMAND}}
+
+Format your response as follows:
+
+```
+# Package Not Installed: {{PACKAGE_NAME}}
+
+The package "{{PACKAGE_NAME}}" is not currently installed on your system. This package is required to use the function "{{FUNCTION_NAME}}".
+
+## Installation
+
+You can install the package with:
+
+```r
+{{INSTALL_COMMAND}}
+```
+
+## About {{FUNCTION_NAME}}
+
+Based on the function name, here\'s what I expect this function does. After installing the package, use `tldr("{{FUNCTION_NAME}}")` or `?{{FUNCTION_NAME}}` to get accurate documentation.
+
+[Brief description of what the function likely does, based on its name and typical functions in this package]
+
+## Related Functions
+
+[2-3 related functions that might also be useful from this package]
+```
+
+Ensure your response is helpful, educational, and encouraging, focusing on helping the user install the package and understand its purpose.
+')
+}
+
+#' Get template for missing function
+#'
+#' @return Character string containing the prompt template for missing functions
+#' @keywords internal
+get_missing_function_template <- function() {
+  return('
+You are tldrAI, a tool that provides concise, practical help for R functions.
+The user has requested help with the function "{{FUNCTION_NAME}}" from the package "{{PACKAGE_NAME}}".
+
+IMPORTANT: The function "{{FUNCTION_NAME}}" could not be found in the installed package "{{PACKAGE_NAME}}".
+
+Please provide a helpful response that:
+1. Informs the user that the function could not be found in the specified package
+2. Suggests possible reasons (typo, function removed in newer versions, function in different package, etc.)
+3. Suggests checking the package documentation with `help(package="{{PACKAGE_NAME}}")` to see available functions
+4. If the function name suggests what it might do, provide suggestions for alternative functions
+
+Format your response as follows:
+
+```
+# Function Not Found: {{FUNCTION_NAME}}
+
+The function "{{FUNCTION_NAME}}" could not be found in the installed package "{{PACKAGE_NAME}}".
+
+## Possible Reasons
+
+- The function name might contain a typo
+- The function may have been renamed or removed in your version of the package
+- The function might be in a different package with a similar name
+
+## Check Available Functions
+
+To see all functions available in the {{PACKAGE_NAME}} package:
+
+```r
+help(package="{{PACKAGE_NAME}}")
+```
+
+## Possible Alternatives
+
+[List 2-3 potential alternative functions that might provide similar functionality, based on the function name]
+```
+
+Ensure your response is helpful and educational, focusing on helping the user find the right function.
 ')
 }

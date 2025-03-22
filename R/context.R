@@ -243,6 +243,28 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
           }
         }
         
+        # Score for machine learning functions
+        if (func_package %in% c("caret", "randomForest", "rpart", "glmnet") || 
+            func_name %in% c("train", "createDataPartition", "randomForest", "rpart", "glmnet")) {
+          score <- score + 3
+          
+          # Score higher for data frames with more rows (better for ML)
+          if (df_info$rows > 50) {
+            score <- score + 1
+          }
+          
+          # Score higher for data frames with multiple column types (good for ML examples)
+          if (!is.null(df_info$column_types)) {
+            n_numeric <- sum(df_info$column_types %in% c("numeric", "integer", "double"))
+            n_factor <- sum(df_info$column_types %in% c("character", "factor"))
+            n_logical <- sum(df_info$column_types == "logical")
+            
+            if (n_numeric > 0 && (n_factor > 0 || n_logical > 0)) {
+              score <- score + 2  # Has both predictors and potential target variables
+            }
+          }
+        }
+        
         # Score higher for plotting functions if data frame has numeric columns
         if (func_package %in% c("ggplot2", "graphics", "lattice")) {
           # Check if data frame has numeric columns for plotting
@@ -309,6 +331,31 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
       # Get top data frames
       top_dfs <- names(head(relevance_scores, top_n))
       
+      # Verify all data frames still exist (they could have been deleted since analysis)
+      if (length(top_dfs) > 0) {
+        # Filter to only include data frames that still exist
+        existing_dfs <- top_dfs[sapply(top_dfs, function(df_name) {
+          exists(df_name, envir = .GlobalEnv) && is.data.frame(get(df_name, envir = .GlobalEnv))
+        })]
+        
+        if (length(existing_dfs) == 0) {
+          # If all the top data frames were deleted, we need to re-analyze the environment
+          if (get_config("debug_mode", default = FALSE)) {
+            message("DEBUG: Data frames changed, re-analyzing environment")
+          }
+          self$analyze_environment()
+          # Recalculate relevance with current environment
+          relevance_scores <- self$score_data_frame_relevance(func_name, func_metadata)
+          if (length(relevance_scores) == 0) {
+            return(character(0))
+          }
+          top_dfs <- names(head(relevance_scores, top_n))
+        } else {
+          # Use only existing data frames
+          top_dfs <- existing_dfs
+        }
+      }
+      
       # Generate examples based on function and data frames
       examples <- character(0)
       
@@ -317,21 +364,45 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
       
       # Generate examples based on package and available data
       for (df_name in top_dfs) {
+        # Double-check the data frame exists and its info is available
+        if (!exists(df_name, envir = .GlobalEnv) || !is.data.frame(get(df_name, envir = .GlobalEnv)) || 
+            is.null(self$context_data$data_frames[[df_name]])) {
+          next  # Skip to the next data frame
+        }
+        
         df_info <- self$context_data$data_frames[[df_name]]
+        
+        # Try to generate examples with proper error handling for missing packages
         
         # Tidyverse/dplyr functions
         if (func_package == "dplyr" && func_name %in% c("filter", "select", "mutate", "summarise", "group_by", 
                                                      "arrange", "distinct", "left_join", "right_join", "inner_join", "full_join")) {
-          examples <- c(examples, self$generate_dplyr_example(func_name, df_name, df_info))
+          if (requireNamespace("dplyr", quietly = TRUE)) {
+            examples <- c(examples, self$generate_dplyr_example(func_name, df_name, df_info))
+          } else {
+            # Add a placeholder with installation suggestion
+            examples <- c(examples, sprintf("# To use dplyr::%s with your '%s' data frame:\n# First install the package: install.packages(\"dplyr\")", 
+                                           func_name, df_name))
+          }
         } 
         # tidyr functions
         else if (func_package == "tidyr" && func_name %in% c("pivot_longer", "pivot_wider", "separate", "unite", "drop_na", "fill")) {
-          examples <- c(examples, self$generate_tidyr_example(func_name, df_name, df_info))
+          if (requireNamespace("tidyr", quietly = TRUE)) {
+            examples <- c(examples, self$generate_tidyr_example(func_name, df_name, df_info))
+          } else {
+            examples <- c(examples, sprintf("# To use tidyr::%s with your '%s' data frame:\n# First install the package: install.packages(\"tidyr\")", 
+                                           func_name, df_name))
+          }
         } 
         # ggplot2 functions
         else if (func_package == "ggplot2" && func_name %in% c("ggplot", "geom_point", "geom_line", "geom_bar", 
                                                            "geom_histogram", "geom_boxplot", "geom_density", "facet_wrap", "facet_grid", "theme_minimal")) {
-          examples <- c(examples, self$generate_ggplot_example(func_name, df_name, df_info))
+          if (requireNamespace("ggplot2", quietly = TRUE)) {
+            examples <- c(examples, self$generate_ggplot_example(func_name, df_name, df_info))
+          } else {
+            examples <- c(examples, sprintf("# To use ggplot2::%s with your '%s' data frame:\n# First install the package: install.packages(\"ggplot2\")", 
+                                           func_name, df_name))
+          }
         } 
         # Basic statistics functions
         else if ((func_package == "base" || func_package == "stats") && 
@@ -344,11 +415,81 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
         }
         # purrr functions
         else if (func_package == "purrr" && func_name %in% c("map", "map_dbl", "map_chr", "map_int", "map_lgl", "map_df", "reduce", "keep", "discard")) {
-          examples <- c(examples, self$generate_purrr_example(func_name, df_name, df_info))
+          if (requireNamespace("purrr", quietly = TRUE)) {
+            examples <- c(examples, self$generate_purrr_example(func_name, df_name, df_info))
+          } else {
+            examples <- c(examples, sprintf("# To use purrr::%s with your '%s' data frame:\n# First install the package: install.packages(\"purrr\")", 
+                                           func_name, df_name))
+          }
         }
         # Survival analysis
         else if (func_package == "survival" && func_name %in% c("Surv", "survfit", "coxph")) {
-          examples <- c(examples, self$generate_survival_example(func_name, df_name, df_info))
+          if (requireNamespace("survival", quietly = TRUE)) {
+            examples <- c(examples, self$generate_survival_example(func_name, df_name, df_info))
+          } else {
+            examples <- c(examples, sprintf("# To use survival::%s with your '%s' data frame:\n# First install the package: install.packages(\"survival\")", 
+                                           func_name, df_name))
+          }
+        }
+        # stringr functions
+        else if (func_package == "stringr" && func_name %in% c("str_detect", "str_extract", "str_replace", "str_replace_all", 
+                                                               "str_split", "str_trim", "str_squish", "str_length", 
+                                                               "str_to_upper", "str_to_lower", "str_to_title", "str_c")) {
+          if (requireNamespace("stringr", quietly = TRUE)) {
+            examples <- c(examples, self$generate_stringr_example(func_name, df_name, df_info))
+          } else {
+            examples <- c(examples, sprintf("# To use stringr::%s with your '%s' data frame:\n# First install the package: install.packages(\"stringr\")", 
+                                           func_name, df_name))
+          }
+        }
+        # lubridate functions
+        else if (func_package == "lubridate" && func_name %in% c("ymd", "mdy", "dmy", "ymd_hms", "year", "month", "day",
+                                                                 "hour", "minute", "second", "wday", "yday", "interval",
+                                                                 "as_date", "as_datetime", "days", "weeks", "months", "years",
+                                                                 "floor_date", "ceiling_date", "round_date", "now", "with_tz", "force_tz")) {
+          if (requireNamespace("lubridate", quietly = TRUE)) {
+            examples <- c(examples, self$generate_lubridate_example(func_name, df_name, df_info))
+          } else {
+            examples <- c(examples, sprintf("# To use lubridate::%s with your '%s' data frame:\n# First install the package: install.packages(\"lubridate\")", 
+                                           func_name, df_name))
+          }
+        }
+        # data.table functions
+        else if (func_package == "data.table" && func_name %in% c("[", "data.table", "setkey", "setDT", "setDF", "fread", "fwrite", "melt", "dcast", "rbindlist")) {
+          if (requireNamespace("data.table", quietly = TRUE)) {
+            examples <- c(examples, self$generate_data_table_example(func_name, df_name, df_info))
+          } else {
+            examples <- c(examples, sprintf("# To use data.table::%s with your '%s' data frame:\n# First install the package: install.packages(\"data.table\")", 
+                                           func_name, df_name))
+          }
+        }
+        # Machine learning functions
+        else if (func_package %in% c("caret", "randomForest", "rpart", "glmnet") || 
+                func_name %in% c("train", "trainControl", "createDataPartition", "createFolds", 
+                                "randomForest", "importance", "varImpPlot", 
+                                "rpart", "rpart.plot", "prune", 
+                                "glmnet", "cv.glmnet")) {
+          # Check if the relevant ML package is installed
+          required_pkg <- func_package
+          if (func_package == "unknown" || func_package == "base" || func_package == "stats") {
+            # Guess the package based on function name
+            if (func_name %in% c("train", "trainControl", "createDataPartition", "createFolds")) {
+              required_pkg <- "caret"
+            } else if (func_name %in% c("randomForest", "importance", "varImpPlot")) {
+              required_pkg <- "randomForest"
+            } else if (func_name %in% c("rpart", "prune")) {
+              required_pkg <- "rpart"
+            } else if (func_name %in% c("glmnet", "cv.glmnet")) {
+              required_pkg <- "glmnet"
+            }
+          }
+          
+          if (requireNamespace(required_pkg, quietly = TRUE)) {
+            examples <- c(examples, self$generate_ml_example(func_name, df_name, df_info))
+          } else {
+            examples <- c(examples, sprintf("# To use %s::%s with your '%s' data frame:\n# First install the package: install.packages(\"%s\")", 
+                                           required_pkg, func_name, df_name, required_pkg))
+          }
         }
         # Generic examples for any other function
         else {
@@ -1057,6 +1198,366 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
               func_name, df_name, func_name, df_name)
     },
     
+    #' @description Generate example for data.table functions
+    #' @param func_name Name of the function
+    #' @param df_name Name of the data frame
+    #' @param df_info Information about the data frame
+    #' @return Example string
+    generate_data_table_example = function(func_name, df_name, df_info) {
+      # Get column names and types
+      col_names <- df_info$column_names
+      col_types <- df_info$column_types
+      
+      if (length(col_names) == 0) {
+        return(sprintf("# Using your data frame '%s' with data.table\nlibrary(data.table)\ndt <- as.data.table(%s)", df_name, df_name))
+      }
+      
+      # Find numeric, character and date columns if column types are available
+      numeric_cols <- character(0)
+      char_cols <- character(0)
+      date_cols <- character(0)
+      logical_cols <- character(0)
+      
+      if (!is.null(col_types) && length(col_types) > 0) {
+        for (i in seq_along(col_types)) {
+          col <- names(col_types)[i]
+          type <- col_types[i]
+          
+          if (type %in% c("numeric", "integer", "double")) {
+            numeric_cols <- c(numeric_cols, col)
+          } else if (type %in% c("character", "factor")) {
+            char_cols <- c(char_cols, col)
+          } else if (type %in% c("Date", "POSIXct", "POSIXlt")) {
+            date_cols <- c(date_cols, col)
+          } else if (type == "logical") {
+            logical_cols <- c(logical_cols, col)
+          }
+        }
+      }
+      
+      # For data.table's special [ function (the core of data.table)
+      if (func_name == "[") {
+        # Basic filtering with i
+        if (length(char_cols) > 0) {
+          # Character column for grouping
+          return(sprintf("# Query your '%s' data frame using data.table syntax\nlibrary(data.table)\ndt <- as.data.table(%s)\ndt[%s == \"value\"]  # Filter rows\ndt[, .(%s = mean(%s)), by = %s]  # Aggregate by group", 
+                        df_name, df_name, char_cols[1], 
+                        if(length(numeric_cols) > 0) paste0("avg_", numeric_cols[1]) else "count", 
+                        if(length(numeric_cols) > 0) numeric_cols[1] else ".N", 
+                        char_cols[1]))
+        } else if (length(numeric_cols) > 0) {
+          # Numeric column for filtering
+          return(sprintf("# Query your '%s' data frame using data.table syntax\nlibrary(data.table)\ndt <- as.data.table(%s)\ndt[%s > mean(%s)]  # Filter rows\ndt[, .(count = .N, mean_val = mean(%s))]  # Aggregate", 
+                        df_name, df_name, numeric_cols[1], numeric_cols[1], numeric_cols[1]))
+        } else {
+          # Generic example
+          return(sprintf("# Query your '%s' data frame using data.table syntax\nlibrary(data.table)\ndt <- as.data.table(%s)\ndt[1:5]  # First 5 rows\ndt[, .(count = .N)]  # Count rows", 
+                        df_name, df_name))
+        }
+      }
+      
+      # For data.table() constructor
+      if (func_name == "data.table") {
+        col_subset <- head(col_names, min(3, length(col_names)))
+        return(sprintf("# Create a data.table from your '%s' data frame\nlibrary(data.table)\ndt <- data.table(%s)", 
+                      df_name, paste(sprintf("%s = %s$%s", col_subset, df_name, col_subset), collapse = ", ")))
+      }
+      
+      # For setkey
+      if (func_name == "setkey") {
+        key_col <- if (length(char_cols) > 0) char_cols[1] else col_names[1]
+        return(sprintf("# Set a key on your '%s' data table for faster operations\nlibrary(data.table)\ndt <- as.data.table(%s)\nsetkey(dt, %s)  # Now dt[\"value\"] will be fast", 
+                      df_name, df_name, key_col))
+      }
+      
+      # For setDT
+      if (func_name == "setDT") {
+        return(sprintf("# Convert your '%s' data frame to a data.table in place\nlibrary(data.table)\n%s_copy <- %s  # Create a copy to work with\nsetDT(%s_copy)  # Now %s_copy is a data.table", 
+                      df_name, df_name, df_name, df_name, df_name))
+      }
+      
+      # For setDF
+      if (func_name == "setDF") {
+        return(sprintf("# Convert your '%s' data.table to a data.frame in place\nlibrary(data.table)\ndt <- as.data.table(%s)\nsetDF(dt)  # Now dt is a data.frame again", 
+                      df_name, df_name))
+      }
+      
+      # For fread
+      if (func_name == "fread") {
+        return(sprintf("# Read a CSV file quickly into a data.table (similar to your '%s')\nlibrary(data.table)\n# Assuming you have a file 'data.csv' with similar structure\nnew_dt <- fread(\"data.csv\")\n# Compare with your existing data\nstr(%s)\nstr(new_dt)", 
+                      df_name, df_name))
+      }
+      
+      # For fwrite
+      if (func_name == "fwrite") {
+        return(sprintf("# Write your '%s' data frame to a CSV file quickly\nlibrary(data.table)\ndt <- as.data.table(%s)\nfwrite(dt, \"output_data.csv\")", 
+                      df_name, df_name))
+      }
+      
+      # For melt (reshape from wide to long)
+      if (func_name == "melt") {
+        if (length(col_names) >= 3) {
+          id_vars <- col_names[1]
+          measure_vars <- paste(col_names[2:min(4, length(col_names))], collapse = "\", \"")
+          return(sprintf("# Reshape your '%s' data frame from wide to long format\nlibrary(data.table)\ndt <- as.data.table(%s)\nlong_dt <- melt(dt, id.vars = \"%s\", measure.vars = c(\"%s\"))", 
+                        df_name, df_name, id_vars, measure_vars))
+        } else {
+          return(sprintf("# Reshape your '%s' data frame from wide to long format\nlibrary(data.table)\ndt <- as.data.table(%s)\n# Assuming first column is the ID variable\nlong_dt <- melt(dt, id.vars = 1, measure.vars = 2:ncol(dt))", 
+                        df_name, df_name))
+        }
+      }
+      
+      # For dcast (reshape from long to wide)
+      if (func_name == "dcast") {
+        if (length(col_names) >= 3) {
+          formula <- sprintf("%s ~ %s", col_names[1], col_names[2])
+          value_var <- col_names[3]
+          return(sprintf("# Reshape your '%s' data frame from long to wide format\nlibrary(data.table)\ndt <- as.data.table(%s)\nwide_dt <- dcast(dt, %s, value.var = \"%s\")", 
+                        df_name, df_name, formula, value_var))
+        } else {
+          return(sprintf("# Reshape your '%s' data frame from long to wide format\nlibrary(data.table)\ndt <- as.data.table(%s)\n# Assuming format needs to be row_id ~ variable\nwide_dt <- dcast(dt, %s ~ variable, value.var = \"value\")", 
+                        df_name, df_name, col_names[1]))
+        }
+      }
+      
+      # For rbindlist
+      if (func_name == "rbindlist") {
+        return(sprintf("# Combine multiple data frames like your '%s' efficiently\nlibrary(data.table)\n# Create a list of similar data frames\ndf_list <- list(%s, %s[1:5,], %s[6:10,])\n# Combine them\ncombined_dt <- rbindlist(df_list)", 
+                      df_name, df_name, df_name, df_name))
+      }
+      
+      # Generic fallback
+      sprintf("# Apply data.table::%s to your '%s' data frame\nlibrary(data.table)\ndt <- as.data.table(%s)\n%s(dt)", 
+              func_name, df_name, df_name, func_name)
+    },
+    
+    #' @description Generate example for machine learning functions
+    #' @param func_name Name of the function
+    #' @param df_name Name of the data frame
+    #' @param df_info Information about the data frame
+    #' @return Example string
+    generate_ml_example = function(func_name, df_name, df_info) {
+      # Get column names and types
+      col_names <- df_info$column_names
+      col_types <- df_info$column_types
+      
+      if (length(col_names) == 0) {
+        return(sprintf("# Using your data frame '%s' for machine learning\nlibrary(caret)\n# More details needed to create specific ML example", df_name))
+      }
+      
+      # Find numeric, categorical, and logical columns
+      numeric_cols <- character(0)
+      cat_cols <- character(0)
+      logical_cols <- character(0)
+      
+      if (!is.null(col_types) && length(col_types) > 0) {
+        for (i in seq_along(col_types)) {
+          col <- names(col_types)[i]
+          type <- col_types[i]
+          
+          if (type %in% c("numeric", "integer", "double")) {
+            numeric_cols <- c(numeric_cols, col)
+          } else if (type %in% c("character", "factor")) {
+            cat_cols <- c(cat_cols, col)
+          } else if (type == "logical") {
+            logical_cols <- c(logical_cols, col)
+          }
+        }
+      }
+      
+      # For caret functions
+      if (func_name %in% c("train", "trainControl", "createDataPartition", "createFolds")) {
+        # For train function (core of caret)
+        if (func_name == "train") {
+          # Determine possible target variable
+          # Prefer logical/categorical for classification, numeric for regression
+          target_var <- NULL
+          
+          if (length(logical_cols) > 0) {
+            target_var <- logical_cols[1]  # Logical is ideal for binary classification
+            model_type <- "classification"
+          } else if (length(cat_cols) > 0) {
+            target_var <- cat_cols[1]      # Categorical for multi-class classification
+            model_type <- "classification"
+          } else if (length(numeric_cols) > 0) {
+            target_var <- numeric_cols[1]  # Numeric for regression
+            model_type <- "regression"
+          } else {
+            target_var <- col_names[1]     # Fallback to first column
+            model_type <- "unknown"
+          }
+          
+          # Get predictors - exclude the target variable
+          predictors <- setdiff(col_names, target_var)
+          if (length(predictors) > 4) {
+            predictors <- predictors[1:4]  # Take first 4 predictors for example
+          }
+          
+          # Build example based on model type
+          if (model_type == "classification") {
+            return(sprintf("# Train a classification model using your '%s' data\nlibrary(caret)\n\n# Create training/testing split\nset.seed(123)\ntrain_idx <- createDataPartition(%s$%s, p = 0.7, list = FALSE)\ntrain_data <- %s[train_idx, ]\ntest_data <- %s[-train_idx, ]\n\n# Train model\nmodel <- train(\n  %s ~ %s,\n  data = train_data,\n  method = \"rf\",  # Random Forest\n  trControl = trainControl(method = \"cv\", number = 5)\n)\n\n# Evaluate model\npredictions <- predict(model, test_data)\nconfusionMatrix(predictions, test_data$%s)",
+                          df_name, df_name, target_var, df_name, df_name, target_var, paste(predictors, collapse = " + "), target_var))
+          } else {
+            return(sprintf("# Train a regression model using your '%s' data\nlibrary(caret)\n\n# Create training/testing split\nset.seed(123)\ntrain_idx <- createDataPartition(%s$%s, p = 0.7, list = FALSE)\ntrain_data <- %s[train_idx, ]\ntest_data <- %s[-train_idx, ]\n\n# Train model\nmodel <- train(\n  %s ~ %s,\n  data = train_data,\n  method = \"lm\",  # Linear model\n  trControl = trainControl(method = \"cv\", number = 5)\n)\n\n# Evaluate model\npredictions <- predict(model, test_data)\nRMSE <- sqrt(mean((predictions - test_data$%s)^2))\nR2 <- cor(predictions, test_data$%s)^2\ncat(\"RMSE:\", RMSE, \"\\nR-squared:\", R2)",
+                          df_name, df_name, target_var, df_name, df_name, target_var, paste(predictors, collapse = " + "), target_var, target_var))
+          }
+        }
+        
+        # For createDataPartition
+        if (func_name == "createDataPartition") {
+          # Pick a logical or categorical column for stratified sampling if available
+          target_var <- if (length(logical_cols) > 0) logical_cols[1] else 
+                       if (length(cat_cols) > 0) cat_cols[1] else col_names[1]
+          
+          return(sprintf("# Create a stratified train/test split using your '%s' data\nlibrary(caret)\n\n# Create indices for 70%% training, 30%% testing\nset.seed(123) # For reproducibility\ntrain_idx <- createDataPartition(%s$%s, p = 0.7, list = FALSE)\n\n# Create the train/test datasets\ntrain_data <- %s[train_idx, ]\ntest_data <- %s[-train_idx, ]", 
+                        df_name, df_name, target_var, df_name, df_name))
+        }
+        
+        # For createFolds
+        if (func_name == "createFolds") {
+          # Pick a logical or categorical column for stratified folds if available
+          target_var <- if (length(logical_cols) > 0) logical_cols[1] else 
+                       if (length(cat_cols) > 0) cat_cols[1] else col_names[1]
+          
+          return(sprintf("# Create cross-validation folds using your '%s' data\nlibrary(caret)\n\n# Create 5 stratified folds\nset.seed(123) # For reproducibility\nfolds <- createFolds(%s$%s, k = 5, list = TRUE, returnTrain = FALSE)\n\n# Example usage in cross-validation loop\nresults <- list()\nfor (i in 1:length(folds)) {\n  # Get the training and test data for this fold\n  test_idx <- folds[[i]]\n  train_idx <- setdiff(1:nrow(%s), test_idx)\n  \n  # Use indices for model training and evaluation\n  # train_data <- %s[train_idx, ]\n  # test_data <- %s[test_idx, ]\n}", 
+                        df_name, df_name, target_var, df_name, df_name, df_name))
+        }
+        
+        # For trainControl
+        if (func_name == "trainControl") {
+          return(sprintf("# Configure training parameters for your '%s' data\nlibrary(caret)\n\n# Basic cross-validation control\nctrl <- trainControl(\n  method = \"cv\",       # Cross-validation\n  number = 5,          # 5 folds\n  classProbs = TRUE,   # Calculate class probabilities\n  summaryFunction = defaultSummary,\n  verboseIter = TRUE   # Print progress\n)\n\n# Use in train function\n# model <- train(\n#   target ~ predictors,\n#   data = %s,\n#   method = \"rf\",\n#   trControl = ctrl\n# )", 
+                        df_name, df_name))
+        }
+      }
+      
+      # For randomForest functions
+      if (func_name %in% c("randomForest", "importance", "varImpPlot")) {
+        # For the main randomForest function
+        if (func_name == "randomForest") {
+          # Determine possible target variable
+          # Prefer logical/categorical for classification, numeric for regression
+          target_var <- NULL
+          
+          if (length(logical_cols) > 0) {
+            target_var <- logical_cols[1]  # Logical is ideal for binary classification
+            model_type <- "classification"
+          } else if (length(cat_cols) > 0) {
+            target_var <- cat_cols[1]      # Categorical for multi-class classification
+            model_type <- "classification"
+          } else if (length(numeric_cols) > 0) {
+            target_var <- numeric_cols[1]  # Numeric for regression
+            model_type <- "regression"
+          } else {
+            target_var <- col_names[1]     # Fallback to first column
+            model_type <- "unknown"
+          }
+          
+          # Get predictors - exclude the target variable
+          predictors <- setdiff(col_names, target_var)
+          predictor_subset <- if (length(predictors) > 0) paste0(df_name, "[, c(\"", paste(predictors, collapse = "\", \""), "\")]") else paste0(df_name, "[, -which(names(", df_name, ") == \"", target_var, "\")]")
+          
+          # Build example based on model type
+          if (model_type == "classification") {
+            return(sprintf("# Train a Random Forest classification model using your '%s' data\nlibrary(randomForest)\n\n# Prepare data\nset.seed(123)\n# Create a 70%% training, 30%% testing split\ntrain_idx <- sample(1:nrow(%s), 0.7 * nrow(%s))\ntrain_data <- %s[train_idx, ]\ntest_data <- %s[-train_idx, ]\n\n# Train model\nrf_model <- randomForest(\n  x = %s,\n  y = %s$%s,\n  ntree = 500,\n  importance = TRUE\n)\n\n# Evaluate model\npredictions <- predict(rf_model, test_data)\nconfusion_matrix <- table(predictions, test_data$%s)\nprint(confusion_matrix)\naccuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)\ncat(\"Accuracy:\", round(accuracy, 4))",
+                          df_name, df_name, df_name, df_name, df_name, predictor_subset, df_name, target_var, target_var))
+          } else {
+            return(sprintf("# Train a Random Forest regression model using your '%s' data\nlibrary(randomForest)\n\n# Prepare data\nset.seed(123)\n# Create a 70%% training, 30%% testing split\ntrain_idx <- sample(1:nrow(%s), 0.7 * nrow(%s))\ntrain_data <- %s[train_idx, ]\ntest_data <- %s[-train_idx, ]\n\n# Train model\nrf_model <- randomForest(\n  x = %s,\n  y = %s$%s,\n  ntree = 500,\n  importance = TRUE\n)\n\n# Evaluate model\npredictions <- predict(rf_model, test_data)\nRMSE <- sqrt(mean((predictions - test_data$%s)^2))\nR2 <- 1 - sum((test_data$%s - predictions)^2) / sum((test_data$%s - mean(test_data$%s))^2)\ncat(\"RMSE:\", round(RMSE, 4), \"\\nR-squared:\", round(R2, 4))",
+                          df_name, df_name, df_name, df_name, df_name, predictor_subset, df_name, target_var, target_var, target_var, target_var, target_var))
+          }
+        }
+        
+        # For importance
+        if (func_name == "importance") {
+          return(sprintf("# Get variable importance from Random Forest model using your '%s' data\nlibrary(randomForest)\n\n# Assuming you've already created a Random Forest model\n# rf_model <- randomForest(%s$target ~ ., data = %s, importance = TRUE)\n\n# Get variable importance\nimp <- importance(rf_model)\nprint(imp)\n\n# Sort variables by importance\nimp_sorted <- imp[order(imp[, \"%%IncMSE\"], decreasing = TRUE), ]\nprint(imp_sorted)", 
+                        df_name, df_name, df_name))
+        }
+        
+        # For varImpPlot
+        if (func_name == "varImpPlot") {
+          return(sprintf("# Plot variable importance from Random Forest model using your '%s' data\nlibrary(randomForest)\n\n# Assuming you've already created a Random Forest model\n# rf_model <- randomForest(%s$target ~ ., data = %s, importance = TRUE)\n\n# Plot variable importance\nvarImpPlot(rf_model, sort = TRUE, main = \"Variable Importance for %s\")", 
+                        df_name, df_name, df_name, df_name))
+        }
+      }
+      
+      # For rpart (decision trees)
+      if (func_name %in% c("rpart", "rpart.plot", "prune")) {
+        # For rpart main function
+        if (func_name == "rpart") {
+          # Determine possible target variable
+          target_var <- NULL
+          
+          if (length(logical_cols) > 0) {
+            target_var <- logical_cols[1]  # Logical is ideal for binary classification
+            model_type <- "classification"
+          } else if (length(cat_cols) > 0) {
+            target_var <- cat_cols[1]      # Categorical for multi-class classification
+            model_type <- "classification"
+          } else if (length(numeric_cols) > 0) {
+            target_var <- numeric_cols[1]  # Numeric for regression
+            model_type <- "regression"
+          } else {
+            target_var <- col_names[1]     # Fallback to first column
+            model_type <- "unknown"
+          }
+          
+          # Get predictors - exclude the target variable
+          predictors <- setdiff(col_names, target_var)
+          if (length(predictors) > 4) {
+            predictors <- predictors[1:4]  # Take first 4 predictors for example
+          }
+          predictors_formula <- paste(predictors, collapse = " + ")
+          
+          # Build example
+          return(sprintf("# Create a decision tree model using your '%s' data\nlibrary(rpart)\nlibrary(rpart.plot)  # For visualization\n\n# Build decision tree model\ntree_model <- rpart(\n  %s ~ %s,\n  data = %s,\n  method = \"%s\",\n  control = rpart.control(cp = 0.01)  # Complexity parameter\n)\n\n# Visualize the tree\nrpart.plot(tree_model, extra = 104, box.palette = \"RdBu\")\n\n# Make predictions\npredictions <- predict(tree_model, %s)\n\n# For classification, get class predictions\n# predictions <- predict(tree_model, %s, type = \"class\")",
+                        df_name, target_var, predictors_formula, df_name, 
+                        ifelse(model_type == "classification", "class", "anova"),
+                        df_name, df_name))
+        }
+        
+        # For prune
+        if (func_name == "prune") {
+          return(sprintf("# Prune a decision tree model using your '%s' data\nlibrary(rpart)\nlibrary(rpart.plot)\n\n# Assuming you've built a decision tree\n# tree_model <- rpart(target ~ predictors, data = %s)\n\n# Plot complexity parameter (CP) vs error\nprintcp(tree_model)\nplotcp(tree_model)\n\n# Find the optimal CP value\nopt_cp <- tree_model$cptable[which.min(tree_model$cptable[,\"xerror\"]),\"CP\"]\n\n# Prune the tree using the optimal CP\npruned_tree <- prune(tree_model, cp = opt_cp)\n\n# Visualize the pruned tree\nrpart.plot(pruned_tree, extra = 104, box.palette = \"RdBu\")", 
+                        df_name, df_name))
+        }
+      }
+      
+      # For glmnet
+      if (func_name %in% c("glmnet", "cv.glmnet")) {
+        # For glmnet main function
+        if (func_name == "glmnet") {
+          # Select numeric predictors
+          if (length(numeric_cols) >= 2) {
+            target_var <- numeric_cols[1]  # First numeric as target
+            predictor_cols <- numeric_cols[-1]  # Rest as predictors
+            
+            return(sprintf("# Create a regularized regression model using your '%s' data\nlibrary(glmnet)\n\n# Prepare data matrix for glmnet\nx <- as.matrix(%s[, c(\"%s\")])\ny <- %s$%s\n\n# Train models with different regularization penalties\n# alpha=1 for LASSO, alpha=0 for Ridge, alpha=0.5 for Elastic Net\nlasso_model <- glmnet(x, y, alpha = 1)\nridge_model <- glmnet(x, y, alpha = 0)\n\n# Plot coefficient paths\npar(mfrow = c(1, 2))\nplot(lasso_model, main = \"LASSO\")\nplot(ridge_model, main = \"Ridge\")\n\n# For finding optimal lambda, use cv.glmnet\ncv_model <- cv.glmnet(x, y, alpha = 1)\nbest_lambda <- cv_model$lambda.min\n\n# Get coefficients at optimal lambda\ncoefs <- coef(cv_model, s = best_lambda)\nprint(coefs)",
+                          df_name, df_name, paste(predictor_cols, collapse = "\", \""), df_name, target_var))
+          } else {
+            return(sprintf("# Create a regularized model using your '%s' data\nlibrary(glmnet)\n\n# Prepare data matrix for glmnet\n# Need numeric predictors and outcome\nx <- as.matrix(%s[, -which(names(%s) == \"target\")])\ny <- %s$target\n\n# Train models with different regularization\nlasso_model <- glmnet(x, y, alpha = 1)  # LASSO\nridge_model <- glmnet(x, y, alpha = 0)  # Ridge\n\n# Plot coefficient paths\npar(mfrow = c(1, 2))\nplot(lasso_model, main = \"LASSO\")\nplot(ridge_model, main = \"Ridge\")",
+                          df_name, df_name, df_name, df_name))
+          }
+        }
+        
+        # For cv.glmnet
+        if (func_name == "cv.glmnet") {
+          # Select numeric predictors
+          if (length(numeric_cols) >= 2) {
+            target_var <- numeric_cols[1]  # First numeric as target
+            predictor_cols <- numeric_cols[-1]  # Rest as predictors
+            
+            return(sprintf("# Cross-validated regularized model using your '%s' data\nlibrary(glmnet)\n\n# Prepare data matrix for glmnet\nx <- as.matrix(%s[, c(\"%s\")])\ny <- %s$%s\n\n# Perform cross-validation to find optimal lambda\nset.seed(123)\ncv_model <- cv.glmnet(x, y, alpha = 1)  # alpha=1 for LASSO\n\n# Plot cross-validation results\nplot(cv_model)\n\n# Get best lambda values\nlambda_min <- cv_model$lambda.min  # Lambda that gives minimum CV error\nlambda_1se <- cv_model$lambda.1se  # Largest lambda within 1 standard error\n\n# Get coefficients at optimal lambda\ncoefs_min <- coef(cv_model, s = lambda_min)\ncoefs_1se <- coef(cv_model, s = lambda_1se)\n\ncat(\"Lambda min:\", lambda_min, \"with\", sum(coefs_min != 0), \"non-zero coefficients\\n\")\ncat(\"Lambda 1se:\", lambda_1se, \"with\", sum(coefs_1se != 0), \"non-zero coefficients\\n\")",
+                          df_name, df_name, paste(predictor_cols, collapse = "\", \""), df_name, target_var))
+          } else {
+            return(sprintf("# Cross-validated regularized model using your '%s' data\nlibrary(glmnet)\n\n# Prepare data matrix for glmnet\n# Need numeric predictors and outcome\nx <- as.matrix(%s[, -which(names(%s) == \"target\")])\ny <- %s$target\n\n# Perform cross-validation to find optimal lambda\nset.seed(123)\ncv_model <- cv.glmnet(x, y, alpha = 1)  # alpha=1 for LASSO\n\n# Plot cross-validation results\nplot(cv_model)\n\n# Get best lambda values\nlambda_min <- cv_model$lambda.min  # Lambda that gives minimum CV error\nlambda_1se <- cv_model$lambda.1se  # Largest lambda within 1 standard error",
+                          df_name, df_name, df_name, df_name))
+          }
+        }
+      }
+      
+      # Generic fallback
+      sprintf("# Apply machine learning function to your '%s' data\nlibrary(caret)  # Load caret package for ML workflows\n\n# Example ML workflow\n# 1. Split data into training and testing\n# 2. Preprocess data if needed\n# 3. Train model\n# 4. Evaluate performance", df_name)
+    },
+    
     #' @description Format context data for inclusion in AI prompt
     #' @param func_name Name of the function
     #' @param func_metadata Metadata about the function
@@ -1158,6 +1659,12 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
       } else if (func_package == "stats" && func_name %in% c("lm", "glm")) {
         suggestions <- c(suggestions, 
                        "Next steps: Examine the model with summary(), plot diagnostics with plot(), or make predictions with predict()")
+      } else if (func_package == "stringr") {
+        suggestions <- c(suggestions,
+                       "Next steps: Consider piping text processing results to other stringr functions or use regex patterns for more advanced matching")
+      } else if (func_package == "lubridate") {
+        suggestions <- c(suggestions,
+                       "Next steps: After date manipulation, consider aggregating by time periods or creating time-based visualizations")
       }
       
       # Add general workflow suggestions based on recent function usage
@@ -1171,6 +1678,162 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
       }
       
       suggestions
+    },
+    
+    #' @description Generate example for stringr text manipulation functions
+    #' @param func_name Name of the function
+    #' @param df_name Name of the data frame
+    #' @param df_info Information about the data frame
+    #' @return Example string
+    generate_stringr_example = function(func_name, df_name, df_info) {
+      # Get column names
+      col_names <- df_info$column_names
+      col_types <- df_info$column_types
+      
+      if (length(col_names) == 0) {
+        return(sprintf("# Using stringr::%s with your '%s' data frame\n# First select text columns to work with", 
+                      func_name, df_name))
+      }
+      
+      # Find the first character/string column if available
+      string_col <- NULL
+      if (!is.null(col_types) && length(col_types) > 0) {
+        for (i in seq_along(col_types)) {
+          if (col_types[i] %in% c("character", "factor", "String")) {
+            string_col <- col_names[i]
+            break
+          }
+        }
+      }
+      
+      # If no string column was found, use the first column
+      if (is.null(string_col) && length(col_names) > 0) {
+        string_col <- col_names[1]
+      }
+      
+      # Generate examples based on function
+      if (func_name == "str_detect") {
+        return(sprintf("# Detect pattern in the '%s' column of your '%s' data frame\n%s |>\n  dplyr::filter(stringr::%s(%s, pattern = \"[A-Z]\"))", 
+                      string_col, df_name, df_name, func_name, string_col))
+      } 
+      else if (func_name == "str_extract") {
+        return(sprintf("# Extract pattern from the '%s' column of your '%s' data frame\n%s |>\n  dplyr::mutate(extracted = stringr::%s(%s, pattern = \"\\\\w+\"))",
+                      string_col, df_name, df_name, func_name, string_col))
+      }
+      else if (func_name == "str_replace" || func_name == "str_replace_all") {
+        return(sprintf("# Replace pattern in the '%s' column of your '%s' data frame\n%s |>\n  dplyr::mutate(%s_clean = stringr::%s(%s, pattern = \"[^\\\\w\\\\s]\", replacement = \"\"))",
+                      string_col, df_name, df_name, string_col, func_name, string_col))
+      }
+      else if (func_name == "str_split") {
+        return(sprintf("# Split strings in the '%s' column of your '%s' data frame\n# Using simplify=TRUE returns a matrix\nsplit_result <- stringr::%s(%s$%s, pattern = \"\\\\s+\", simplify = TRUE)",
+                      string_col, df_name, func_name, df_name, string_col))
+      }
+      else if (func_name == "str_trim" || func_name == "str_squish") {
+        return(sprintf("# Clean whitespace in the '%s' column of your '%s' data frame\n%s |>\n  dplyr::mutate(%s_clean = stringr::%s(%s))",
+                      string_col, df_name, df_name, string_col, func_name, string_col))
+      }
+      else if (func_name == "str_length") {
+        return(sprintf("# Get string lengths from the '%s' column of your '%s' data frame\n%s |>\n  dplyr::mutate(%s_length = stringr::%s(%s))",
+                      string_col, df_name, df_name, string_col, func_name, string_col))
+      }
+      else if (func_name == "str_to_upper" || func_name == "str_to_lower" || func_name == "str_to_title") {
+        return(sprintf("# Change case in the '%s' column of your '%s' data frame\n%s |>\n  dplyr::mutate(%s_mod = stringr::%s(%s))",
+                      string_col, df_name, df_name, string_col, func_name, string_col))
+      }
+      else if (func_name == "str_c") {
+        if (length(col_names) >= 2) {
+          return(sprintf("# Combine strings from columns in your '%s' data frame\n%s |>\n  dplyr::mutate(combined = stringr::%s(%s, %s, sep = \" - \"))",
+                        df_name, df_name, func_name, col_names[1], col_names[2]))
+        } else {
+          return(sprintf("# Combine strings in your '%s' data frame\n%s |>\n  dplyr::mutate(combined = stringr::%s(%s, \"_suffix\", sep = \"\"))",
+                        df_name, df_name, func_name, string_col))
+        }
+      }
+      else {
+        # Generic example for other stringr functions
+        return(sprintf("# Apply stringr::%s to the '%s' column of your '%s' data frame\n%s |>\n  dplyr::mutate(result = stringr::%s(%s))",
+                      func_name, string_col, df_name, df_name, func_name, string_col))
+      }
+    },
+    
+    #' @description Generate example for lubridate date/time functions
+    #' @param func_name Name of the function
+    #' @param df_name Name of the data frame
+    #' @param df_info Information about the data frame
+    #' @return Example string
+    generate_lubridate_example = function(func_name, df_name, df_info) {
+      # Get column names and types
+      col_names <- df_info$column_names
+      col_types <- df_info$column_types
+      
+      if (length(col_names) == 0) {
+        return(sprintf("# Using lubridate::%s with your '%s' data frame\n# First select date/time columns to work with", 
+                      func_name, df_name))
+      }
+      
+      # Find the first date/time column if available
+      date_col <- NULL
+      if (!is.null(col_types) && length(col_types) > 0) {
+        for (i in seq_along(col_types)) {
+          if (col_types[i] %in% c("Date", "POSIXct", "POSIXlt", "POSIXt")) {
+            date_col <- col_names[i]
+            break
+          }
+        }
+      }
+      
+      # If no date column was found, use the first column
+      if (is.null(date_col) && length(col_names) > 0) {
+        date_col <- col_names[1]
+      }
+      
+      # Generate examples based on function
+      if (func_name %in% c("ymd", "mdy", "dmy", "ymd_hms")) {
+        return(sprintf("# Parse dates in the '%s' column of your '%s' data frame\n%s |>\n  dplyr::mutate(%s_date = lubridate::%s(%s))",
+                      date_col, df_name, df_name, date_col, func_name, date_col))
+      }
+      else if (func_name %in% c("year", "month", "day", "hour", "minute", "second", "wday", "yday")) {
+        return(sprintf("# Extract %s from the '%s' column of your '%s' data frame\n%s |>\n  dplyr::mutate(%s_%s = lubridate::%s(%s))",
+                      func_name, date_col, df_name, df_name, date_col, func_name, func_name, date_col))
+      }
+      else if (func_name == "interval") {
+        if (length(col_names) >= 2) {
+          return(sprintf("# Create an interval between two date columns in your '%s' data frame\n%s |>\n  dplyr::mutate(date_interval = lubridate::%s(%s, %s))",
+                        df_name, df_name, func_name, col_names[1], col_names[2]))
+        } else {
+          return(sprintf("# Create an interval in your '%s' data frame\n%s |>\n  dplyr::mutate(date_interval = lubridate::%s(%s, %s + lubridate::days(30)))",
+                        df_name, df_name, func_name, date_col, date_col))
+        }
+      }
+      else if (func_name %in% c("as_date", "as_datetime")) {
+        return(sprintf("# Convert '%s' column in your '%s' data frame to a date/datetime\n%s |>\n  dplyr::mutate(%s_converted = lubridate::%s(%s))",
+                      date_col, df_name, df_name, date_col, func_name, date_col))
+      }
+      else if (func_name %in% c("days", "weeks", "months", "years", "hours", "minutes", "seconds")) {
+        return(sprintf("# Add time units to '%s' column in your '%s' data frame\n%s |>\n  dplyr::mutate(%s_future = %s + lubridate::%s(10))",
+                      date_col, df_name, df_name, date_col, date_col, func_name))
+      }
+      else if (func_name %in% c("floor_date", "ceiling_date", "round_date")) {
+        return(sprintf("# Round dates in the '%s' column of your '%s' data frame\n%s |>\n  dplyr::mutate(%s_rounded = lubridate::%s(%s, unit = \"month\"))",
+                      date_col, df_name, df_name, date_col, func_name, date_col))
+      }
+      else if (func_name == "now") {
+        return(sprintf("# Compare dates in '%s' to current time\n%s |>\n  dplyr::mutate(is_past = %s < lubridate::%s())",
+                      date_col, df_name, date_col, func_name))
+      }
+      else if (func_name == "with_tz" || func_name == "force_tz") {
+        return(sprintf("# Change timezone of dates in the '%s' column of your '%s' data frame\n%s |>\n  dplyr::mutate(%s_utc = lubridate::%s(%s, tzone = \"UTC\"))",
+                      date_col, df_name, df_name, date_col, func_name, date_col))
+      }
+      else if (func_name == "is.Date" || func_name == "is.POSIXct" || func_name == "is.POSIXlt") {
+        return(sprintf("# Check if '%s' is a specific date type\nany(lubridate::%s(%s$%s))",
+                      date_col, func_name, df_name, date_col))
+      }
+      else {
+        # Generic example for other lubridate functions
+        return(sprintf("# Apply lubridate::%s to the '%s' column of your '%s' data frame\n%s |>\n  dplyr::mutate(result = lubridate::%s(%s))",
+                      func_name, date_col, df_name, df_name, func_name, date_col))
+      }
     }
   ),
   

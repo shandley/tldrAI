@@ -28,3 +28,31 @@ test_that("build_prompt includes all required placeholders", {
   expect_match(template, "{{EXAMPLES_REQUESTED}}", fixed = TRUE)
   expect_match(template, "{{VERBOSE}}", fixed = TRUE)
 })
+
+test_that("missing package templates have required placeholders", {
+  template <- get_missing_package_template()
+  expect_match(template, "{{FUNCTION_NAME}}", fixed = TRUE)
+  expect_match(template, "{{PACKAGE_NAME}}", fixed = TRUE)
+  expect_match(template, "{{INSTALL_COMMAND}}", fixed = TRUE)
+  
+  template <- get_missing_function_template()
+  expect_match(template, "{{FUNCTION_NAME}}", fixed = TRUE)
+  expect_match(template, "{{PACKAGE_NAME}}", fixed = TRUE)
+})
+
+test_that("missing package metadata is handled correctly", {
+  # Create mock metadata for a missing package
+  mock_metadata <- list(
+    name = "some_function",
+    package = "nonexistent_package",
+    missing_package = TRUE,
+    install_command = 'install.packages("nonexistent_package")',
+    signature = "some_function(...)"
+  )
+  
+  # Test that build_prompt uses the missing package template
+  prompt <- build_prompt("some_function", mock_metadata, FALSE, 2)
+  expect_match(prompt, "Package Not Installed:", fixed = TRUE)
+  expect_match(prompt, "nonexistent_package", fixed = TRUE)
+  expect_match(prompt, 'install.packages("nonexistent_package")', fixed = TRUE)
+})
