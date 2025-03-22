@@ -43,7 +43,21 @@ tldr_config <- function(api_key = NULL, openai_api_key = NULL,
   if (!is.null(openai_api_key)) config$openai_api_key <- openai_api_key
   if (!is.null(provider)) {
     if (!provider %in% c("claude", "openai")) {
-      stop("Provider must be one of: claude, openai")
+      stop(
+        "\n\n╭────────────────────── Invalid Provider Specified ────────────────────╮\n",
+        "│                                                                       │\n",
+        "│ The provider '", provider, "' is not supported.                             \n",
+        "│                                                                       │\n",
+        "│ Supported providers are:                                              │\n",
+        "│ - \"claude\"  (default)                                                 │\n",
+        "│ - \"openai\"                                                            │\n",
+        "│                                                                       │\n",
+        "│ Example usage:                                                        │\n",
+        "│ tldr_config(provider = \"claude\")                                      │\n",
+        "│ tldr_config(provider = \"openai\")                                      │\n",
+        "│                                                                       │\n",
+        "╰───────────────────────────────────────────────────────────────────────╯"
+      )
     }
     config$provider <- provider
   }
@@ -61,7 +75,20 @@ tldr_config <- function(api_key = NULL, openai_api_key = NULL,
   if (!is.null(enable_fallback)) config$enable_fallback <- enable_fallback
   if (!is.null(fallback_provider)) {
     if (!fallback_provider %in% c("claude", "openai")) {
-      stop("Fallback provider must be one of: claude, openai")
+      stop(
+        "\n\n╭────────────────── Invalid Fallback Provider Specified ────────────────╮\n",
+        "│                                                                       │\n",
+        "│ The fallback provider '", fallback_provider, "' is not supported.           \n",
+        "│                                                                       │\n",
+        "│ Supported providers are:                                              │\n",
+        "│ - \"claude\"                                                            │\n",
+        "│ - \"openai\"                                                            │\n",
+        "│                                                                       │\n",
+        "│ Example usage:                                                        │\n",
+        "│ tldr_config(enable_fallback = TRUE, fallback_provider = \"openai\")     │\n",
+        "│                                                                       │\n",
+        "╰───────────────────────────────────────────────────────────────────────╯"
+      )
     }
     if (fallback_provider == config$provider) {
       warning("Fallback provider is the same as primary provider. This may not be useful.")

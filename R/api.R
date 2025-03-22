@@ -63,7 +63,21 @@ ClaudeProvider <- R6::R6Class("ClaudeProvider",
       self$model <- config$model
       
       if (is.null(self$api_key) || self$api_key == "") {
-        stop("API key not configured for Claude. Use tldr_config(api_key = 'your_api_key', provider = 'claude') to set it.")
+        stop(
+          "\n\n╭────────────────────── Claude API Key Not Found ──────────────────────╮\n",
+          "│                                                                       │\n",
+          "│ You need to set up your Claude API key before using this provider.    │\n",
+          "│                                                                       │\n",
+          "│ To set up your API key, run:                                          │\n",
+          "│ tldr_config(api_key = \"your_claude_api_key\")                          │\n",
+          "│                                                                       │\n",
+          "│ You can get an API key from: https://console.anthropic.com/           │\n",
+          "│                                                                       │\n",
+          "│ Alternatively, use the \"openai\" provider if you have that key:        │\n",
+          "│ tldr(\"function_name\", provider = \"openai\")                           │\n",
+          "│                                                                       │\n",
+          "╰───────────────────────────────────────────────────────────────────────╯"
+        )
       }
       
       if (is.null(self$model) || !self$model %in% self$provider_models) {
@@ -163,7 +177,21 @@ OpenAIProvider <- R6::R6Class("OpenAIProvider",
       self$model <- config$openai_model
       
       if (is.null(self$api_key) || self$api_key == "") {
-        stop("API key not configured for OpenAI. Use tldr_config(openai_api_key = 'your_api_key', provider = 'openai') to set it.")
+        stop(
+          "\n\n╭────────────────────── OpenAI API Key Not Found ──────────────────────╮\n",
+          "│                                                                       │\n",
+          "│ You need to set up your OpenAI API key before using this provider.    │\n",
+          "│                                                                       │\n",
+          "│ To set up your API key, run:                                          │\n",
+          "│ tldr_config(openai_api_key = \"your_openai_api_key\")                   │\n",
+          "│                                                                       │\n",
+          "│ You can get an API key from: https://platform.openai.com/api-keys     │\n",
+          "│                                                                       │\n",
+          "│ Alternatively, use the \"claude\" provider if you have that key:        │\n",
+          "│ tldr(\"function_name\", provider = \"claude\")                           │\n",
+          "│                                                                       │\n",
+          "╰───────────────────────────────────────────────────────────────────────╯"
+        )
       }
       
       if (is.null(self$model) || !self$model %in% self$provider_models) {
@@ -248,7 +276,21 @@ LLMProviderFactory <- R6::R6Class("LLMProviderFactory",
       } else if (provider_name == "openai") {
         return(OpenAIProvider$new(config))
       } else {
-        stop("Unsupported provider: ", provider_name)
+        stop(
+          "\n\n╭────────────────────── Invalid Provider Specified ────────────────────╮\n",
+          "│                                                                       │\n",
+          "│ The provider '", provider_name, "' is not supported.                        \n",
+          "│                                                                       │\n",
+          "│ Supported providers are:                                              │\n",
+          "│ - \"claude\"  (default)                                                 │\n",
+          "│ - \"openai\"                                                            │\n",
+          "│                                                                       │\n",
+          "│ Example usage:                                                        │\n",
+          "│ tldr(\"mean\", provider = \"claude\")                                    │\n",
+          "│ tldr(\"dplyr::filter\", provider = \"openai\")                           │\n",
+          "│                                                                       │\n",
+          "╰───────────────────────────────────────────────────────────────────────╯"
+        )
       }
     }
   )
