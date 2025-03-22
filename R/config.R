@@ -237,7 +237,10 @@ get_config_all <- function() {
       visualization_settings = list(
         enable_visualization = FALSE,  # Enable visualizations
         default_type = "diagram",  # Default visualization type
-        auto_install = FALSE  # Automatically install required packages
+        auto_install = FALSE,  # Automatically install required packages
+        auto_export = FALSE,  # Automatically export visualizations
+        export_format = "svg",  # Default export format
+        export_dir = getwd()  # Default export directory
       )
     )
     
