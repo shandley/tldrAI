@@ -38,6 +38,11 @@
 #'        a path based on function name and visualization type.
 #' @param export_format Character string specifying the format for exported visualization: "svg" (vector), 
 #'        "png" (bitmap), or "txt" (ASCII). Default is "svg".
+#' @param multimodal Logical indicating whether to use the multimodal visualization interface showing 
+#'        text documentation and visualizations side by side. Requires htmlwidgets and htmltools 
+#'        packages. Default is FALSE.
+#' @param theme Character string specifying the color theme for the multimodal interface: "light" (default) 
+#'        or "dark".
 #'
 #' @return Prints formatted help to the console and invisibly returns the raw response as a character string.
 #'         The returned object has attributes that can be accessed with attr():
@@ -101,6 +106,10 @@
 #'      export_path = "if_flowchart.png", 
 #'      export_format = "png")                      # Export as PNG
 #' 
+#' # Multimodal interface (text and visualization combined)
+#' tldr("dplyr::filter", multimodal = TRUE)         # Light theme (default)
+#' tldr("ggplot2::ggplot", multimodal = TRUE, theme = "dark") # Dark theme
+#' 
 #' # Resolving ambiguous function names
 #' library(ggplot2)                 # Load the package first
 #' tldr("ggplot")                   # Now refers to ggplot2::ggplot
@@ -112,7 +121,8 @@
 tldr <- function(func_name, verbose = NULL, examples = NULL, refresh = FALSE, 
                 provider = NULL, voice = NULL, async = NULL, context = NULL,
                 visualize = NULL, vis_type = NULL, prompt_install = TRUE,
-                export_visualization = FALSE, export_path = NULL, export_format = NULL) {
+                export_visualization = FALSE, export_path = NULL, export_format = NULL,
+                multimodal = FALSE, theme = "light") {
   # Validate input
   if (!is.character(func_name) || length(func_name) != 1) {
     stop("func_name must be a single character string")
@@ -412,6 +422,8 @@ tldr <- function(func_name, verbose = NULL, examples = NULL, refresh = FALSE,
       export_visualization = export_visualization,
       export_path = export_path,
       export_format = export_format,
+      multimodal = multimodal,
+      theme = theme,
       timestamp = Sys.time()
     ), envir = .GlobalEnv)
     
@@ -453,7 +465,8 @@ tldr <- function(func_name, verbose = NULL, examples = NULL, refresh = FALSE,
   
   # Print formatted response
   print_tldr_response(response_obj, func_name, verbose, examples, 
-                     selected_provider, voice, visualization)
+                     selected_provider, voice, visualization,
+                     multimodal, theme)
   
   # Handle export if requested explicitly or via auto-export config
   vis_settings <- get_config("visualization_settings", 
@@ -573,7 +586,9 @@ tldr_check_async <- function(wait = TRUE, timeout = 30) {
     print_tldr_response(response, async_req$func_name, 
                       async_req$verbose, async_req$examples, 
                       async_req$provider, async_req$voice,
-                      visualization)
+                      visualization,
+                      async_req$multimodal %||% FALSE, 
+                      async_req$theme %||% "light")
     
     # Handle export if requested explicitly or via auto-export config
     vis_settings <- get_config("visualization_settings", 
