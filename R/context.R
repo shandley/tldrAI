@@ -243,6 +243,28 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
           }
         }
         
+        # Score for machine learning functions
+        if (func_package %in% c("caret", "randomForest", "rpart", "glmnet") || 
+            func_name %in% c("train", "createDataPartition", "randomForest", "rpart", "glmnet")) {
+          score <- score + 3
+          
+          # Score higher for data frames with more rows (better for ML)
+          if (df_info$rows > 50) {
+            score <- score + 1
+          }
+          
+          # Score higher for data frames with multiple column types (good for ML examples)
+          if (!is.null(df_info$column_types)) {
+            n_numeric <- sum(df_info$column_types %in% c("numeric", "integer", "double"))
+            n_factor <- sum(df_info$column_types %in% c("character", "factor"))
+            n_logical <- sum(df_info$column_types == "logical")
+            
+            if (n_numeric > 0 && (n_factor > 0 || n_logical > 0)) {
+              score <- score + 2  # Has both predictors and potential target variables
+            }
+          }
+        }
+        
         # Score higher for plotting functions if data frame has numeric columns
         if (func_package %in% c("ggplot2", "graphics", "lattice")) {
           # Check if data frame has numeric columns for plotting
@@ -353,6 +375,14 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
         # data.table functions
         else if (func_package == "data.table" && func_name %in% c("[", "data.table", "setkey", "setDT", "setDF", "fread", "fwrite", "melt", "dcast", "rbindlist")) {
           examples <- c(examples, self$generate_data_table_example(func_name, df_name, df_info))
+        }
+        # Machine learning functions
+        else if (func_package %in% c("caret", "randomForest", "rpart", "glmnet") || 
+                func_name %in% c("train", "trainControl", "createDataPartition", "createFolds", 
+                                "randomForest", "importance", "varImpPlot", 
+                                "rpart", "rpart.plot", "prune", 
+                                "glmnet", "cv.glmnet")) {
+          examples <- c(examples, self$generate_ml_example(func_name, df_name, df_info))
         }
         # Generic examples for any other function
         else {
@@ -1192,6 +1222,233 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
       # Generic fallback
       sprintf("# Apply data.table::%s to your '%s' data frame\nlibrary(data.table)\ndt <- as.data.table(%s)\n%s(dt)", 
               func_name, df_name, df_name, func_name)
+    },
+    
+    #' @description Generate example for machine learning functions
+    #' @param func_name Name of the function
+    #' @param df_name Name of the data frame
+    #' @param df_info Information about the data frame
+    #' @return Example string
+    generate_ml_example = function(func_name, df_name, df_info) {
+      # Get column names and types
+      col_names <- df_info$column_names
+      col_types <- df_info$column_types
+      
+      if (length(col_names) == 0) {
+        return(sprintf("# Using your data frame '%s' for machine learning\nlibrary(caret)\n# More details needed to create specific ML example", df_name))
+      }
+      
+      # Find numeric, categorical, and logical columns
+      numeric_cols <- character(0)
+      cat_cols <- character(0)
+      logical_cols <- character(0)
+      
+      if (!is.null(col_types) && length(col_types) > 0) {
+        for (i in seq_along(col_types)) {
+          col <- names(col_types)[i]
+          type <- col_types[i]
+          
+          if (type %in% c("numeric", "integer", "double")) {
+            numeric_cols <- c(numeric_cols, col)
+          } else if (type %in% c("character", "factor")) {
+            cat_cols <- c(cat_cols, col)
+          } else if (type == "logical") {
+            logical_cols <- c(logical_cols, col)
+          }
+        }
+      }
+      
+      # For caret functions
+      if (func_name %in% c("train", "trainControl", "createDataPartition", "createFolds")) {
+        # For train function (core of caret)
+        if (func_name == "train") {
+          # Determine possible target variable
+          # Prefer logical/categorical for classification, numeric for regression
+          target_var <- NULL
+          
+          if (length(logical_cols) > 0) {
+            target_var <- logical_cols[1]  # Logical is ideal for binary classification
+            model_type <- "classification"
+          } else if (length(cat_cols) > 0) {
+            target_var <- cat_cols[1]      # Categorical for multi-class classification
+            model_type <- "classification"
+          } else if (length(numeric_cols) > 0) {
+            target_var <- numeric_cols[1]  # Numeric for regression
+            model_type <- "regression"
+          } else {
+            target_var <- col_names[1]     # Fallback to first column
+            model_type <- "unknown"
+          }
+          
+          # Get predictors - exclude the target variable
+          predictors <- setdiff(col_names, target_var)
+          if (length(predictors) > 4) {
+            predictors <- predictors[1:4]  # Take first 4 predictors for example
+          }
+          
+          # Build example based on model type
+          if (model_type == "classification") {
+            return(sprintf("# Train a classification model using your '%s' data\nlibrary(caret)\n\n# Create training/testing split\nset.seed(123)\ntrain_idx <- createDataPartition(%s$%s, p = 0.7, list = FALSE)\ntrain_data <- %s[train_idx, ]\ntest_data <- %s[-train_idx, ]\n\n# Train model\nmodel <- train(\n  %s ~ %s,\n  data = train_data,\n  method = \"rf\",  # Random Forest\n  trControl = trainControl(method = \"cv\", number = 5)\n)\n\n# Evaluate model\npredictions <- predict(model, test_data)\nconfusionMatrix(predictions, test_data$%s)",
+                          df_name, df_name, target_var, df_name, df_name, target_var, paste(predictors, collapse = " + "), target_var))
+          } else {
+            return(sprintf("# Train a regression model using your '%s' data\nlibrary(caret)\n\n# Create training/testing split\nset.seed(123)\ntrain_idx <- createDataPartition(%s$%s, p = 0.7, list = FALSE)\ntrain_data <- %s[train_idx, ]\ntest_data <- %s[-train_idx, ]\n\n# Train model\nmodel <- train(\n  %s ~ %s,\n  data = train_data,\n  method = \"lm\",  # Linear model\n  trControl = trainControl(method = \"cv\", number = 5)\n)\n\n# Evaluate model\npredictions <- predict(model, test_data)\nRMSE <- sqrt(mean((predictions - test_data$%s)^2))\nR2 <- cor(predictions, test_data$%s)^2\ncat(\"RMSE:\", RMSE, \"\\nR-squared:\", R2)",
+                          df_name, df_name, target_var, df_name, df_name, target_var, paste(predictors, collapse = " + "), target_var, target_var))
+          }
+        }
+        
+        # For createDataPartition
+        if (func_name == "createDataPartition") {
+          # Pick a logical or categorical column for stratified sampling if available
+          target_var <- if (length(logical_cols) > 0) logical_cols[1] else 
+                       if (length(cat_cols) > 0) cat_cols[1] else col_names[1]
+          
+          return(sprintf("# Create a stratified train/test split using your '%s' data\nlibrary(caret)\n\n# Create indices for 70%% training, 30%% testing\nset.seed(123) # For reproducibility\ntrain_idx <- createDataPartition(%s$%s, p = 0.7, list = FALSE)\n\n# Create the train/test datasets\ntrain_data <- %s[train_idx, ]\ntest_data <- %s[-train_idx, ]", 
+                        df_name, df_name, target_var, df_name, df_name))
+        }
+        
+        # For createFolds
+        if (func_name == "createFolds") {
+          # Pick a logical or categorical column for stratified folds if available
+          target_var <- if (length(logical_cols) > 0) logical_cols[1] else 
+                       if (length(cat_cols) > 0) cat_cols[1] else col_names[1]
+          
+          return(sprintf("# Create cross-validation folds using your '%s' data\nlibrary(caret)\n\n# Create 5 stratified folds\nset.seed(123) # For reproducibility\nfolds <- createFolds(%s$%s, k = 5, list = TRUE, returnTrain = FALSE)\n\n# Example usage in cross-validation loop\nresults <- list()\nfor (i in 1:length(folds)) {\n  # Get the training and test data for this fold\n  test_idx <- folds[[i]]\n  train_idx <- setdiff(1:nrow(%s), test_idx)\n  \n  # Use indices for model training and evaluation\n  # train_data <- %s[train_idx, ]\n  # test_data <- %s[test_idx, ]\n}", 
+                        df_name, df_name, target_var, df_name, df_name, df_name))
+        }
+        
+        # For trainControl
+        if (func_name == "trainControl") {
+          return(sprintf("# Configure training parameters for your '%s' data\nlibrary(caret)\n\n# Basic cross-validation control\nctrl <- trainControl(\n  method = \"cv\",       # Cross-validation\n  number = 5,          # 5 folds\n  classProbs = TRUE,   # Calculate class probabilities\n  summaryFunction = defaultSummary,\n  verboseIter = TRUE   # Print progress\n)\n\n# Use in train function\n# model <- train(\n#   target ~ predictors,\n#   data = %s,\n#   method = \"rf\",\n#   trControl = ctrl\n# )", 
+                        df_name, df_name))
+        }
+      }
+      
+      # For randomForest functions
+      if (func_name %in% c("randomForest", "importance", "varImpPlot")) {
+        # For the main randomForest function
+        if (func_name == "randomForest") {
+          # Determine possible target variable
+          # Prefer logical/categorical for classification, numeric for regression
+          target_var <- NULL
+          
+          if (length(logical_cols) > 0) {
+            target_var <- logical_cols[1]  # Logical is ideal for binary classification
+            model_type <- "classification"
+          } else if (length(cat_cols) > 0) {
+            target_var <- cat_cols[1]      # Categorical for multi-class classification
+            model_type <- "classification"
+          } else if (length(numeric_cols) > 0) {
+            target_var <- numeric_cols[1]  # Numeric for regression
+            model_type <- "regression"
+          } else {
+            target_var <- col_names[1]     # Fallback to first column
+            model_type <- "unknown"
+          }
+          
+          # Get predictors - exclude the target variable
+          predictors <- setdiff(col_names, target_var)
+          predictor_subset <- if (length(predictors) > 0) paste0(df_name, "[, c(\"", paste(predictors, collapse = "\", \""), "\")]") else paste0(df_name, "[, -which(names(", df_name, ") == \"", target_var, "\")]")
+          
+          # Build example based on model type
+          if (model_type == "classification") {
+            return(sprintf("# Train a Random Forest classification model using your '%s' data\nlibrary(randomForest)\n\n# Prepare data\nset.seed(123)\n# Create a 70%% training, 30%% testing split\ntrain_idx <- sample(1:nrow(%s), 0.7 * nrow(%s))\ntrain_data <- %s[train_idx, ]\ntest_data <- %s[-train_idx, ]\n\n# Train model\nrf_model <- randomForest(\n  x = %s,\n  y = %s$%s,\n  ntree = 500,\n  importance = TRUE\n)\n\n# Evaluate model\npredictions <- predict(rf_model, test_data)\nconfusion_matrix <- table(predictions, test_data$%s)\nprint(confusion_matrix)\naccuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)\ncat(\"Accuracy:\", round(accuracy, 4))",
+                          df_name, df_name, df_name, df_name, df_name, predictor_subset, df_name, target_var, target_var))
+          } else {
+            return(sprintf("# Train a Random Forest regression model using your '%s' data\nlibrary(randomForest)\n\n# Prepare data\nset.seed(123)\n# Create a 70%% training, 30%% testing split\ntrain_idx <- sample(1:nrow(%s), 0.7 * nrow(%s))\ntrain_data <- %s[train_idx, ]\ntest_data <- %s[-train_idx, ]\n\n# Train model\nrf_model <- randomForest(\n  x = %s,\n  y = %s$%s,\n  ntree = 500,\n  importance = TRUE\n)\n\n# Evaluate model\npredictions <- predict(rf_model, test_data)\nRMSE <- sqrt(mean((predictions - test_data$%s)^2))\nR2 <- 1 - sum((test_data$%s - predictions)^2) / sum((test_data$%s - mean(test_data$%s))^2)\ncat(\"RMSE:\", round(RMSE, 4), \"\\nR-squared:\", round(R2, 4))",
+                          df_name, df_name, df_name, df_name, df_name, predictor_subset, df_name, target_var, target_var, target_var, target_var, target_var))
+          }
+        }
+        
+        # For importance
+        if (func_name == "importance") {
+          return(sprintf("# Get variable importance from Random Forest model using your '%s' data\nlibrary(randomForest)\n\n# Assuming you've already created a Random Forest model\n# rf_model <- randomForest(%s$target ~ ., data = %s, importance = TRUE)\n\n# Get variable importance\nimp <- importance(rf_model)\nprint(imp)\n\n# Sort variables by importance\nimp_sorted <- imp[order(imp[, \"%%IncMSE\"], decreasing = TRUE), ]\nprint(imp_sorted)", 
+                        df_name, df_name, df_name))
+        }
+        
+        # For varImpPlot
+        if (func_name == "varImpPlot") {
+          return(sprintf("# Plot variable importance from Random Forest model using your '%s' data\nlibrary(randomForest)\n\n# Assuming you've already created a Random Forest model\n# rf_model <- randomForest(%s$target ~ ., data = %s, importance = TRUE)\n\n# Plot variable importance\nvarImpPlot(rf_model, sort = TRUE, main = \"Variable Importance for %s\")", 
+                        df_name, df_name, df_name, df_name))
+        }
+      }
+      
+      # For rpart (decision trees)
+      if (func_name %in% c("rpart", "rpart.plot", "prune")) {
+        # For rpart main function
+        if (func_name == "rpart") {
+          # Determine possible target variable
+          target_var <- NULL
+          
+          if (length(logical_cols) > 0) {
+            target_var <- logical_cols[1]  # Logical is ideal for binary classification
+            model_type <- "classification"
+          } else if (length(cat_cols) > 0) {
+            target_var <- cat_cols[1]      # Categorical for multi-class classification
+            model_type <- "classification"
+          } else if (length(numeric_cols) > 0) {
+            target_var <- numeric_cols[1]  # Numeric for regression
+            model_type <- "regression"
+          } else {
+            target_var <- col_names[1]     # Fallback to first column
+            model_type <- "unknown"
+          }
+          
+          # Get predictors - exclude the target variable
+          predictors <- setdiff(col_names, target_var)
+          if (length(predictors) > 4) {
+            predictors <- predictors[1:4]  # Take first 4 predictors for example
+          }
+          predictors_formula <- paste(predictors, collapse = " + ")
+          
+          # Build example
+          return(sprintf("# Create a decision tree model using your '%s' data\nlibrary(rpart)\nlibrary(rpart.plot)  # For visualization\n\n# Build decision tree model\ntree_model <- rpart(\n  %s ~ %s,\n  data = %s,\n  method = \"%s\",\n  control = rpart.control(cp = 0.01)  # Complexity parameter\n)\n\n# Visualize the tree\nrpart.plot(tree_model, extra = 104, box.palette = \"RdBu\")\n\n# Make predictions\npredictions <- predict(tree_model, %s)\n\n# For classification, get class predictions\n# predictions <- predict(tree_model, %s, type = \"class\")",
+                        df_name, target_var, predictors_formula, df_name, 
+                        ifelse(model_type == "classification", "class", "anova"),
+                        df_name, df_name))
+        }
+        
+        # For prune
+        if (func_name == "prune") {
+          return(sprintf("# Prune a decision tree model using your '%s' data\nlibrary(rpart)\nlibrary(rpart.plot)\n\n# Assuming you've built a decision tree\n# tree_model <- rpart(target ~ predictors, data = %s)\n\n# Plot complexity parameter (CP) vs error\nprintcp(tree_model)\nplotcp(tree_model)\n\n# Find the optimal CP value\nopt_cp <- tree_model$cptable[which.min(tree_model$cptable[,\"xerror\"]),\"CP\"]\n\n# Prune the tree using the optimal CP\npruned_tree <- prune(tree_model, cp = opt_cp)\n\n# Visualize the pruned tree\nrpart.plot(pruned_tree, extra = 104, box.palette = \"RdBu\")", 
+                        df_name, df_name))
+        }
+      }
+      
+      # For glmnet
+      if (func_name %in% c("glmnet", "cv.glmnet")) {
+        # For glmnet main function
+        if (func_name == "glmnet") {
+          # Select numeric predictors
+          if (length(numeric_cols) >= 2) {
+            target_var <- numeric_cols[1]  # First numeric as target
+            predictor_cols <- numeric_cols[-1]  # Rest as predictors
+            
+            return(sprintf("# Create a regularized regression model using your '%s' data\nlibrary(glmnet)\n\n# Prepare data matrix for glmnet\nx <- as.matrix(%s[, c(\"%s\")])\ny <- %s$%s\n\n# Train models with different regularization penalties\n# alpha=1 for LASSO, alpha=0 for Ridge, alpha=0.5 for Elastic Net\nlasso_model <- glmnet(x, y, alpha = 1)\nridge_model <- glmnet(x, y, alpha = 0)\n\n# Plot coefficient paths\npar(mfrow = c(1, 2))\nplot(lasso_model, main = \"LASSO\")\nplot(ridge_model, main = \"Ridge\")\n\n# For finding optimal lambda, use cv.glmnet\ncv_model <- cv.glmnet(x, y, alpha = 1)\nbest_lambda <- cv_model$lambda.min\n\n# Get coefficients at optimal lambda\ncoefs <- coef(cv_model, s = best_lambda)\nprint(coefs)",
+                          df_name, df_name, paste(predictor_cols, collapse = "\", \""), df_name, target_var))
+          } else {
+            return(sprintf("# Create a regularized model using your '%s' data\nlibrary(glmnet)\n\n# Prepare data matrix for glmnet\n# Need numeric predictors and outcome\nx <- as.matrix(%s[, -which(names(%s) == \"target\")])\ny <- %s$target\n\n# Train models with different regularization\nlasso_model <- glmnet(x, y, alpha = 1)  # LASSO\nridge_model <- glmnet(x, y, alpha = 0)  # Ridge\n\n# Plot coefficient paths\npar(mfrow = c(1, 2))\nplot(lasso_model, main = \"LASSO\")\nplot(ridge_model, main = \"Ridge\")",
+                          df_name, df_name, df_name, df_name))
+          }
+        }
+        
+        # For cv.glmnet
+        if (func_name == "cv.glmnet") {
+          # Select numeric predictors
+          if (length(numeric_cols) >= 2) {
+            target_var <- numeric_cols[1]  # First numeric as target
+            predictor_cols <- numeric_cols[-1]  # Rest as predictors
+            
+            return(sprintf("# Cross-validated regularized model using your '%s' data\nlibrary(glmnet)\n\n# Prepare data matrix for glmnet\nx <- as.matrix(%s[, c(\"%s\")])\ny <- %s$%s\n\n# Perform cross-validation to find optimal lambda\nset.seed(123)\ncv_model <- cv.glmnet(x, y, alpha = 1)  # alpha=1 for LASSO\n\n# Plot cross-validation results\nplot(cv_model)\n\n# Get best lambda values\nlambda_min <- cv_model$lambda.min  # Lambda that gives minimum CV error\nlambda_1se <- cv_model$lambda.1se  # Largest lambda within 1 standard error\n\n# Get coefficients at optimal lambda\ncoefs_min <- coef(cv_model, s = lambda_min)\ncoefs_1se <- coef(cv_model, s = lambda_1se)\n\ncat(\"Lambda min:\", lambda_min, \"with\", sum(coefs_min != 0), \"non-zero coefficients\\n\")\ncat(\"Lambda 1se:\", lambda_1se, \"with\", sum(coefs_1se != 0), \"non-zero coefficients\\n\")",
+                          df_name, df_name, paste(predictor_cols, collapse = "\", \""), df_name, target_var))
+          } else {
+            return(sprintf("# Cross-validated regularized model using your '%s' data\nlibrary(glmnet)\n\n# Prepare data matrix for glmnet\n# Need numeric predictors and outcome\nx <- as.matrix(%s[, -which(names(%s) == \"target\")])\ny <- %s$target\n\n# Perform cross-validation to find optimal lambda\nset.seed(123)\ncv_model <- cv.glmnet(x, y, alpha = 1)  # alpha=1 for LASSO\n\n# Plot cross-validation results\nplot(cv_model)\n\n# Get best lambda values\nlambda_min <- cv_model$lambda.min  # Lambda that gives minimum CV error\nlambda_1se <- cv_model$lambda.1se  # Largest lambda within 1 standard error",
+                          df_name, df_name, df_name, df_name))
+          }
+        }
+      }
+      
+      # Generic fallback
+      sprintf("# Apply machine learning function to your '%s' data\nlibrary(caret)  # Load caret package for ML workflows\n\n# Example ML workflow\n# 1. Split data into training and testing\n# 2. Preprocess data if needed\n# 3. Train model\n# 4. Evaluate performance", df_name)
     },
     
     #' @description Format context data for inclusion in AI prompt
