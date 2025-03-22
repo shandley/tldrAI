@@ -1,13 +1,42 @@
 #' Get metadata about an R function
 #'
 #' @param func_name The name of the function
+#' @param package The package name (optional)
 #'
 #' @return A list with function metadata
 #' @keywords internal
-get_function_metadata <- function(func_name) {
-  # Get the function
+get_function_metadata <- function(func_name, package = NULL) {
+  # Try to get the function from specified package first
+  if (!is.null(package)) {
+    if (!requireNamespace(package, quietly = TRUE)) {
+      stop("Package '", package, "' is not installed or cannot be loaded")
+    }
+    
+    # Check if function exists in the package
+    if (exists(func_name, envir = asNamespace(package), inherits = FALSE)) {
+      func <- get(func_name, envir = asNamespace(package))
+      return(list(
+        name = func_name,
+        package = package,
+        signature = get_function_signature(func_name, func),
+        description = get_function_description(func_name, package)
+      ))
+    } else {
+      stop("Function '", func_name, "' not found in package '", package, "'")
+    }
+  }
+  
+  # Get the function from global environment
   if (exists(func_name, mode = "function")) {
     func <- get(func_name, mode = "function")
+    pkg <- find_package(func_name)
+    
+    return(list(
+      name = func_name,
+      package = pkg,
+      signature = get_function_signature(func_name, func),
+      description = get_function_description(func_name, pkg)
+    ))
   } else {
     # Try to find the function in loaded packages
     matches <- utils::apropos(func_name, mode = "function")
@@ -30,23 +59,15 @@ get_function_metadata <- function(func_name) {
     }
     
     func <- get(func_name, mode = "function")
+    pkg <- find_package(func_name)
+    
+    return(list(
+      name = func_name,
+      package = pkg,
+      signature = get_function_signature(func_name, func),
+      description = get_function_description(func_name, pkg)
+    ))
   }
-  
-  # Get package name
-  package <- find_package(func_name)
-  
-  # Get function signature
-  signature <- get_function_signature(func_name, func)
-  
-  # Get function description
-  description <- get_function_description(func_name, package)
-  
-  list(
-    name = func_name,
-    package = package,
-    signature = signature,
-    description = description
-  )
 }
 
 #' Find the package that a function belongs to

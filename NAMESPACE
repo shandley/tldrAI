@@ -3,3 +3,5 @@
 export(tldr)
 export(tldr_config)
 export(tldr_cache_clear)
+export(tldr_offline)
+export(tldr_test_connection)
