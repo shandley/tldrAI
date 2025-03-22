@@ -1,0 +1,83 @@
+---
+title: "Introduction to tldrAI"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Introduction to tldrAI}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+# tldrAI: AI-Powered Quick Reference for R Functions
+
+`tldrAI` is an R package that provides concise, practical help for R functions using Large Language Models (LLMs). It maintains the brevity and example-focused philosophy of "tldr" guides while adding AI intelligence for highly relevant, personalized help.
+
+## Overview
+
+Traditional R help documentation can be verbose and theoretical. `tldrAI` offers a modern alternative with:
+
+- **Concise explanations**: Clear, straightforward descriptions of what functions do
+- **Practical examples**: Real-world code examples showing common usage patterns 
+- **Contextual awareness**: Examples tailored to your actual data and environment
+- **Multiple visualizations**: Function diagrams, flowcharts, and syntax highlighting
+- **Character voices**: Optional personality traits to make learning more engaging
+
+## Documentation
+
+`tldrAI` comes with comprehensive documentation to help you get the most out of the package:
+
+### Vignettes
+
+1. **[Getting Started with tldrAI](getting-started.html)**  
+   Learn the basics of installation, configuration, and everyday usage.
+
+2. **[Advanced Features of tldrAI](advanced-features.html)**  
+   Explore in-depth configuration, performance optimization, and advanced techniques.
+
+3. **[Using Visualizations in tldrAI](visualizations.html)**  
+   Learn about the visualization system and how to create, customize, and export function visualizations.
+
+### Function Documentation
+
+- `tldr()`: The main function for getting AI-powered help
+- `tldr_config()`: Configure package settings
+- `tldr_context_config()`: Configure contextual awareness
+- `tldr_visualization_config()`: Configure visualization settings
+- `tldr_list_voices()`: List available character voices
+- And many more...
+
+## Quick Example
+
+```r
+library(tldrAI)
+
+# Configure API key (do this once)
+tldr_config(api_key = "your_claude_api_key")
+
+# Get concise help for a function
+tldr("mean")
+
+# Get help with contextual awareness using your actual data
+tldr("filter", context = TRUE)
+
+# Get help with visualization
+tldr("lm", visualize = TRUE)
+
+# Get help with a character voice
+tldr("sd", voice = "enthusiastic_explorer")
+```
+
+## Getting Help
+
+For more information, visit the GitHub repository: https://github.com/shandley/tldrAI
+
+## License
+
+MIT

@@ -1,49 +1,114 @@
 #' Get AI-powered quick reference for R functions
 #'
-#' @param func_name Character string specifying the name of an R function
-#' @param verbose Logical indicating whether to include more detailed information
-#' @param examples Integer indicating the number of examples to include
-#' @param refresh Logical indicating whether to ignore cached results
-#' @param provider Character string specifying the LLM provider to use ("claude" or "openai")
-#' @param voice Character string specifying the character voice to use (e.g., "enthusiastic_explorer")
-#' @param async Logical indicating whether to make the API call asynchronously
-#' @param context Logical indicating whether to use contextual awareness
-#' @param visualize Logical indicating whether to include visualizations
-#' @param vis_type Character string specifying the visualization type ("diagram", "flowchart", "data_flow",
-#'                "function_network", or "code_highlight")
-#' @param prompt_install Logical indicating whether to prompt for installation of required packages
-#' @param export_visualization Logical indicating whether to export the visualization
-#' @param export_path Character string specifying the path to save exported visualization
-#' @param export_format Character string specifying the format for exported visualization ("svg", "png", "txt")
+#' The main function for retrieving AI-generated help for R functions. It provides concise, 
+#' practical explanations with examples, focusing on real-world usage rather than theoretical 
+#' details. The function connects to LLM providers (Claude or OpenAI) to generate customized 
+#' help text that prioritizes clarity and usefulness.
 #'
-#' @return Prints formatted help to the console (invisibly returns the raw response)
+#' @param func_name Character string specifying the name of an R function. Can be in the form 
+#'        "function" or "package::function" (recommended for functions in packages like dplyr or ggplot2).
+#' @param verbose Logical indicating whether to include more detailed information. When TRUE, 
+#'        returns more comprehensive explanations and additional usage details. Default is FALSE.
+#' @param examples Integer indicating the number of examples to include. Higher values provide 
+#'        more diverse usage examples. Default is 2.
+#' @param refresh Logical indicating whether to ignore cached results and generate a fresh response. 
+#'        Useful when checking for updated information. Default is FALSE.
+#' @param provider Character string specifying the LLM provider to use. Options are "claude" (default) 
+#'        or "openai". Requires API key to be configured for the selected provider.
+#' @param voice Character string specifying the character voice to use. Options include "enthusiastic_explorer", 
+#'        "cynical_detective", "wise_mentor", "eccentric_scientist", etc. Use tldr_list_voices() to see all available options.
+#' @param async Logical indicating whether to make the API call asynchronously. When TRUE, allows you to continue 
+#'        working while waiting for the response. Use tldr_check_async() to retrieve the result. Default is FALSE.
+#' @param context Logical indicating whether to use contextual awareness. When TRUE, analyzes your R environment 
+#'        to provide examples relevant to your data and loaded packages. Default is FALSE.
+#' @param visualize Logical indicating whether to include visualizations. When TRUE, generates visualizations to 
+#'        help understand the function. Default is FALSE.
+#' @param vis_type Character string specifying the visualization type:
+#'        \itemize{
+#'          \item "diagram": Simple function diagram showing inputs/outputs (default)
+#'          \item "flowchart": Logical flow diagram showing conditionals and loops
+#'          \item "data_flow": Data transformation diagram (good for dplyr, ggplot2)
+#'          \item "function_network": Network diagram showing related functions
+#'          \item "code_highlight": Syntax highlighted code with interactive elements
+#'        }
+#' @param prompt_install Logical indicating whether to prompt for installation of required packages 
+#'        for visualizations. When FALSE, falls back to ASCII visualization if packages are missing. Default is TRUE.
+#' @param export_visualization Logical indicating whether to export the visualization to a file. Default is FALSE.
+#' @param export_path Character string specifying the path to save exported visualization. If NULL, auto-generates 
+#'        a path based on function name and visualization type.
+#' @param export_format Character string specifying the format for exported visualization: "svg" (vector), 
+#'        "png" (bitmap), or "txt" (ASCII). Default is "svg".
+#'
+#' @return Prints formatted help to the console and invisibly returns the raw response as a character string.
+#'         The returned object has attributes that can be accessed with attr():
+#'         \itemize{
+#'           \item "provider": The LLM provider used ("claude" or "openai")
+#'           \item "voice": The character voice used (if any)
+#'           \item "context_aware": TRUE if contextual awareness was used
+#'         }
+#'
+#' @seealso
+#' \code{\link{tldr_config}} for configuration options
+#' \code{\link{tldr_context_config}} for contextual awareness settings
+#' \code{\link{tldr_list_voices}} for available character voices
+#' \code{\link{tldr_check_async}} for retrieving asynchronous responses
+#' \code{\link{tldr_visualization_config}} for visualization settings
+#'
 #' @export
 #'
 #' @examples
 #' \dontrun{
-#' tldr("mean")
-#' tldr("ggplot2::ggplot", examples = 3)
-#' tldr("dplyr::filter", provider = "openai")
-#' tldr("median", voice = "enthusiastic_explorer")
-#' tldr("sd", voice = "cynical_detective")
-#' tldr("plot", async = TRUE)  # Make an asynchronous API call
-#' tldr("filter", context = TRUE)  # Use contextual awareness
-#' tldr("mean", visualize = TRUE)  # Include visualization
-#' tldr("if", vis_type = "flowchart")  # Show a flowchart visualization
-#' tldr("lm", visualize = TRUE, prompt_install = FALSE)  # Don't prompt for installation
-#' tldr("dplyr::filter", vis_type = "data_flow")  # Show data transformation flow
-#' tldr("lm", vis_type = "function_network")  # Show related functions network
-#' tldr("mean", vis_type = "code_highlight")  # Show highlighted code
+#' # Basic usage
+#' tldr("mean")                     # Basic help for mean function
+#' tldr("ggplot2::ggplot")          # Always use package prefix for clarity
+#' 
+#' # Detailed information
+#' tldr("sd", verbose = TRUE)       # More detailed explanation
+#' tldr("aggregate", examples = 4)  # More usage examples
+#' 
+#' # Provider selection
+#' tldr("lm", provider = "claude")  # Use Claude API (default)
+#' tldr("glm", provider = "openai") # Use OpenAI API
+#' 
+#' # Character voices
+#' tldr("median", voice = "enthusiastic_explorer") # Excited and energetic
+#' tldr("sd", voice = "cynical_detective")         # Skeptical and direct
+#' tldr("var", voice = "wise_mentor")              # Thoughtful and patient
+#' tldr("sum", voice = "eccentric_scientist")      # Quirky and unpredictable
+#' 
+#' # Contextual awareness
+#' tldr("filter", context = TRUE)   # Examples using your actual data
+#' tldr("ggplot", context = TRUE)   # Tailored to your environment
+#' 
+#' # Asynchronous usage
+#' tldr("plot", async = TRUE)       # Non-blocking API call
+#' result <- tldr_check_async()     # Retrieve the result when ready
+#' 
+#' # Visualizations
+#' tldr("mean", visualize = TRUE)                   # Basic diagram (default)
+#' tldr("if", vis_type = "flowchart")               # Logical flow diagram
+#' tldr("dplyr::filter", vis_type = "data_flow")    # Data transformation flow
+#' tldr("lm", vis_type = "function_network")        # Related functions network
+#' tldr("mean", vis_type = "code_highlight")        # Syntax highlighted code
 #' 
 #' # Export visualizations
-#' tldr("mean", visualize = TRUE, export_visualization = TRUE, export_path = "mean_diagram.svg")
-#' tldr("if", vis_type = "flowchart", export_visualization = TRUE, 
-#'      export_path = "if_flowchart.png", export_format = "png")
+#' tldr("mean", visualize = TRUE, 
+#'      export_visualization = TRUE, 
+#'      export_path = "mean_diagram.svg")           # Export as SVG
+#'      
+#' tldr("if", vis_type = "flowchart", 
+#'      export_visualization = TRUE, 
+#'      export_path = "if_flowchart.png", 
+#'      export_format = "png")                      # Export as PNG
 #' 
-#' # Load a package first to avoid function ambiguity
-#' library(ggplot2)
-#' tldr("ggplot")
+#' # Resolving ambiguous function names
+#' library(ggplot2)                 # Load the package first
+#' tldr("ggplot")                   # Now refers to ggplot2::ggplot
 #' }
+#' 
+#' @note API keys must be configured before using this function. 
+#' Use tldr_config(api_key = "your_claude_api_key") or 
+#' tldr_config(openai_api_key = "your_openai_api_key") to set up API access.
 tldr <- function(func_name, verbose = NULL, examples = NULL, refresh = FALSE, 
                 provider = NULL, voice = NULL, async = NULL, context = NULL,
                 visualize = NULL, vis_type = NULL, prompt_install = TRUE,

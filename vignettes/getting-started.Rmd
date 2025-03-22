@@ -1,0 +1,277 @@
+---
+title: "Getting Started with tldrAI"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting Started with tldrAI}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+# Introduction
+
+`tldrAI` is an R package that provides AI-powered quick reference for R functions. It uses Large Language Models (LLMs) like Claude and OpenAI to generate concise, practical help text focused on examples and real-world usage. The goal is to maintain the brevity and example-focused philosophy of "tldr" guides while adding AI intelligence for highly relevant, personalized help.
+
+Unlike traditional R help documentation, which can be verbose and focused on theoretical explanations, `tldrAI` focuses on:
+
+- **Concise explanations**: Clear, straightforward descriptions of what functions do
+- **Practical examples**: Real-world code examples showing common usage patterns
+- **Contextual awareness**: Examples tailored to your actual data and environment
+- **Personality**: Optional character voices to make learning more engaging
+
+This vignette will guide you through setting up and using `tldrAI` for everyday R development.
+
+## Installation
+
+You can install the development version of `tldrAI` from GitHub with:
+
+```{r}
+# install.packages("devtools")
+devtools::install_github("shandley/tldrAI")
+```
+
+## Getting Started
+
+First, load the package:
+
+```{r}
+library(tldrAI)
+```
+
+### API Keys
+
+`tldrAI` requires at least one API key to communicate with LLM providers. You can use either Claude (Anthropic), OpenAI, or both:
+
+#### Setting up Claude API Key (Recommended)
+
+1. Get a Claude API key from [Anthropic's console](https://console.anthropic.com/)
+2. Configure tldrAI to use your key:
+
+```{r}
+tldr_config(api_key = "your_claude_api_key")
+```
+
+#### Setting up OpenAI API Key (Alternative)
+
+1. Get an OpenAI API key from [OpenAI's platform](https://platform.openai.com/api-keys)
+2. Configure tldrAI to use your key:
+
+```{r}
+tldr_config(openai_api_key = "your_openai_api_key")
+```
+
+You can test your API connection with:
+
+```{r}
+# Test Claude connection
+tldr_test_connection("claude")
+
+# Test OpenAI connection
+tldr_test_connection("openai")
+```
+
+## Basic Usage
+
+The main function is `tldr()`, which takes an R function name and returns concise help:
+
+```{r}
+# Get help for the mean function
+tldr("mean")
+
+# Get help for a function in a specific package
+tldr("dplyr::filter")
+```
+
+### Adding More Detail
+
+You can customize the level of detail returned:
+
+```{r}
+# Get more detailed help
+tldr("mean", verbose = TRUE)
+
+# Get more examples
+tldr("mean", examples = 5)
+```
+
+### Using Different Providers
+
+You can choose which LLM provider to use:
+
+```{r}
+# Use Claude by default (if configured)
+tldr("mean")
+
+# Explicitly use OpenAI
+tldr("mean", provider = "openai")
+```
+
+## Contextual Awareness
+
+One of the most powerful features of `tldrAI` is contextual awareness, which provides examples tailored to your actual environment:
+
+```{r}
+# Load some example data
+library(dplyr)
+data(mtcars)
+
+# Get help with context
+tldr("filter", context = TRUE)
+```
+
+The contextual help will include examples using your actual data frames, like `mtcars` in this example.
+
+### Enabling Contextual Awareness by Default
+
+You can enable contextual awareness for all queries:
+
+```{r}
+tldr_context_config(enable_context_awareness = TRUE)
+```
+
+### Privacy Settings
+
+Configure what data is analyzed and shared with the AI:
+
+```{r}
+tldr_context_config(
+  analyze_data_frames = TRUE,    # Analyze data frames in environment
+  analyze_packages = TRUE,       # Look at loaded packages
+  analyze_history = TRUE,        # Look at command history
+  anonymize_data = TRUE,         # Don't include actual data values
+  max_rows_sample = 3,           # Maximum rows to sample
+  max_cols_sample = 5            # Maximum columns to sample
+)
+```
+
+### Testing Context Analysis
+
+You can see what information would be collected:
+
+```{r}
+tldr_test_context()
+```
+
+## Character Voices
+
+Add personality to responses with character voices:
+
+```{r}
+# List available voices
+tldr_list_voices()
+
+# Try different voices
+tldr("mean", voice = "enthusiastic_explorer")
+tldr("sd", voice = "cynical_detective")
+tldr("median", voice = "wise_mentor")
+tldr("var", voice = "eccentric_scientist")
+
+# Set a default voice
+tldr_config(character_voice = "enthusiastic_explorer")
+```
+
+## Visualizations
+
+`tldrAI` can generate visualizations to help understand functions better:
+
+```{r}
+# Get function visualization
+tldr("mean", visualize = TRUE)
+
+# Try different visualization types
+tldr("mean", vis_type = "diagram")           # Simple function diagram
+tldr("if", vis_type = "flowchart")           # Logical flow diagram
+tldr("dplyr::filter", vis_type = "data_flow") # Data transformation flow
+tldr("lm", vis_type = "function_network")     # Related functions network
+tldr("mean", vis_type = "code_highlight")     # Syntax highlighted code
+```
+
+### Exporting Visualizations
+
+You can export visualizations to files:
+
+```{r}
+# Export as SVG (default)
+tldr("mean", visualize = TRUE, export_visualization = TRUE, 
+     export_path = "mean_diagram.svg")
+
+# Export as PNG
+tldr("if", vis_type = "flowchart", export_visualization = TRUE, 
+     export_path = "if_flowchart.png", export_format = "png")
+```
+
+## Offline Mode
+
+`tldrAI` can work offline using cached responses:
+
+```{r}
+# Enable offline mode
+tldr_offline(TRUE)
+
+# Use cached responses
+tldr("mean")
+
+# Disable offline mode when back online
+tldr_offline(FALSE)
+```
+
+## Cache Management
+
+`tldrAI` automatically caches responses to improve performance and reduce API costs:
+
+```{r}
+# Clear all cached responses
+tldr_cache_clear()
+
+# Clear only expired cache entries
+tldr_cache_clear(expired_only = TRUE)
+
+# Set cache time-to-live (in days)
+tldr_config(cache_ttl = 30)
+```
+
+## Configuration
+
+You can configure various aspects of `tldrAI`:
+
+```{r}
+tldr_config(
+  # Provider settings
+  provider = "claude",                # Default provider
+  enable_fallback = TRUE,             # Enable fallback to another provider
+  fallback_provider = "openai",       # Provider to use as fallback
+  
+  # Usage settings
+  verbose_default = FALSE,            # Default verbosity
+  examples_default = 2,               # Default number of examples
+  
+  # UI settings
+  show_progress = TRUE,               # Show progress bar during API calls
+  
+  # Cache settings
+  cache_enabled = TRUE,               # Enable response caching
+  cache_ttl = 30,                     # Cache time-to-live in days
+  
+  # Visualization settings
+  visualize = TRUE,                   # Enable visualizations by default
+  visualization_type = "diagram"      # Default visualization type
+)
+```
+
+## Conclusion
+
+`tldrAI` transforms how you get help in R, making it more concise, relevant, and personalized. It's especially helpful for:
+
+- Learning new functions quickly
+- Understanding complex functions with practical examples
+- Getting examples tailored to your actual data
+- Making R documentation more engaging with character voices
+
+For more advanced features, check out the "Advanced Features" vignette.

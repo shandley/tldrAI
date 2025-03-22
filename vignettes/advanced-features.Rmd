@@ -1,0 +1,369 @@
+---
+title: "Advanced Features of tldrAI"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Advanced Features of tldrAI}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+# Advanced Features
+
+This vignette covers the advanced features and configurations of the `tldrAI` package. These features are designed to enhance your experience with AI-powered R function documentation, providing more control, better performance, and additional customization options.
+
+## In-depth Configuration Options
+
+The `tldrAI` package offers comprehensive configuration options through the `tldr_config()` function. Here's a complete list of configuration parameters:
+
+```{r}
+tldr_config(
+  # API Keys
+  api_key = "your_claude_api_key",
+  openai_api_key = "your_openai_api_key",
+  
+  # Provider settings
+  provider = "claude",                # Default provider: "claude" or "openai"
+  model = "claude-3-opus-20240229",   # Claude model
+  openai_model = "gpt-4-turbo",       # OpenAI model
+  
+  # Fallback mechanism
+  enable_fallback = TRUE,             # Enable fallback to another provider
+  fallback_provider = "openai",       # Provider to use as fallback
+  
+  # Cache settings
+  cache_enabled = TRUE,               # Enable/disable response caching
+  cache_dir = "custom/cache/path",    # Custom cache directory
+  cache_ttl = 30,                     # Cache time-to-live in days
+  offline_mode = FALSE,               # Operate in offline mode (cache only)
+  
+  # Usage settings
+  verbose_default = FALSE,            # Default verbosity setting
+  examples_default = 2,               # Default number of examples
+  character_voice = "wise_mentor",    # Default character voice
+  
+  # UI settings
+  show_progress = TRUE,               # Show progress bar during API calls
+  debug_mode = FALSE,                 # Show debug information
+  
+  # Performance settings
+  async_mode = FALSE,                 # Enable asynchronous API calls
+  timeout = 60,                       # API request timeout in seconds
+  max_retries = 3,                    # Maximum number of retry attempts
+  
+  # Visualization settings
+  visualize = TRUE,                   # Enable visualizations by default
+  visualization_type = "diagram"      # Default visualization type
+)
+```
+
+### Model Selection
+
+You can choose from various LLM models with different capabilities and speed/cost tradeoffs:
+
+```{r}
+# Claude models
+tldr_config(provider = "claude", model = "claude-3-opus-20240229")   # Most capable, slower
+tldr_config(provider = "claude", model = "claude-3-sonnet-20240229") # Balanced performance
+tldr_config(provider = "claude", model = "claude-3-haiku-20240307")  # Fastest, less capable
+
+# OpenAI models
+tldr_config(provider = "openai", openai_model = "gpt-4o")          # Latest model
+tldr_config(provider = "openai", openai_model = "gpt-4-turbo")     # Balanced performance
+tldr_config(provider = "openai", openai_model = "gpt-3.5-turbo")   # Faster, less capable
+```
+
+## Context Awareness with Privacy Settings
+
+Contextual awareness allows `tldrAI` to analyze your R environment and provide tailored examples. You can configure exactly what data is analyzed and how it's handled:
+
+```{r}
+tldr_context_config(
+  # Core settings
+  enable_context_awareness = TRUE,    # Enable contextual awareness by default
+  
+  # Data sources to analyze
+  analyze_data_frames = TRUE,         # Analyze data frames in the environment
+  analyze_packages = TRUE,            # Analyze loaded packages
+  analyze_history = TRUE,             # Analyze command history
+  
+  # Privacy controls
+  anonymize_data = TRUE,              # Don't include actual data samples
+  
+  # Sampling limits
+  max_rows_sample = 5,                # Maximum rows to sample
+  max_cols_sample = 5,                # Maximum columns to sample
+  
+  # Information detail
+  include_row_count = TRUE,           # Include row counts in context
+  include_class_info = TRUE,          # Include class information
+  include_column_types = TRUE,        # Include column types in context
+  
+  # History analysis
+  max_history_commands = 10           # Maximum history commands to analyze
+)
+```
+
+### Privacy and Data Protection
+
+When `anonymize_data = TRUE`, the following privacy protections are applied:
+
+1. **No actual data values** are sent to the LLM provider
+2. Only **structural information** like column names, data types, and dimensions is included
+3. Command history is filtered to remove potentially sensitive information
+
+You can review exactly what would be shared with:
+
+```{r}
+tldr_test_context()
+```
+
+## Asynchronous API Usage
+
+For improved workflow, you can make asynchronous API calls:
+
+```{r}
+# Make an asynchronous request
+tldr("mean", async = TRUE)
+
+# Continue working on other tasks...
+x <- 1:100
+summary(x)
+hist(x)
+
+# Check and retrieve the result when ready
+result <- tldr_check_async()
+
+# Check without waiting (returns NULL if not ready)
+tldr_check_async(wait = FALSE)
+
+# Wait with a custom timeout (in seconds)
+tldr_check_async(timeout = 60)
+
+# Enable async mode by default
+tldr_config(async_mode = TRUE)
+```
+
+The asynchronous mode requires the `future` and `promises` packages:
+
+```{r}
+install.packages(c("future", "promises"))
+```
+
+## Performance Optimization
+
+Optimize API performance with these settings:
+
+```{r}
+# Adjust timeout for slow connections
+tldr_config(timeout = 120)  # 2 minutes
+
+# Increase retry attempts for unreliable networks
+tldr_config(max_retries = 5)
+
+# Configure cache behavior
+tldr_config(cache_ttl = 90)  # Keep cache valid for 90 days
+```
+
+### Provider Fallback
+
+Configure automatic fallback to a secondary provider if the primary one fails:
+
+```{r}
+# Enable fallback from Claude to OpenAI
+tldr_config(
+  provider = "claude",
+  enable_fallback = TRUE,
+  fallback_provider = "openai"
+)
+
+# Or enable fallback from OpenAI to Claude
+tldr_config(
+  provider = "openai",
+  enable_fallback = TRUE,
+  fallback_provider = "claude"
+)
+```
+
+## Advanced Visualization Options
+
+`tldrAI` provides a powerful visualization system with multiple options:
+
+### Visualization Types
+
+```{r}
+# Function diagram
+tldr("mean", vis_type = "diagram")
+
+# Logical flow diagram
+tldr("if", vis_type = "flowchart")
+
+# Data transformation flow diagram
+tldr("dplyr::filter", vis_type = "data_flow")
+
+# Function network diagram showing related functions
+tldr("lm", vis_type = "function_network")
+
+# Syntax highlighted code with interactive elements
+tldr("mean", vis_type = "code_highlight")
+```
+
+### Visualization Configuration
+
+Configure visualization settings:
+
+```{r}
+# Configure visualization settings
+tldr_visualization_config(
+  enable = TRUE,                   # Enable visualizations
+  default_type = "diagram",        # Default visualization type
+  auto_install = TRUE,             # Automatically install required packages
+  auto_export = TRUE,              # Automatically export visualizations
+  export_format = "svg",           # Default export format
+  export_dir = "~/R/visualizations" # Export directory
+)
+```
+
+### Exporting Visualizations Programmatically
+
+```{r}
+# Get function metadata and create visualization
+metadata <- get_function_metadata("mean")
+vis <- create_visualization("mean", metadata, "diagram")
+
+# Export in different formats
+export_visualization(vis, "mean_diagram.svg")
+export_visualization(vis, "mean_diagram.png", format = "png", width = 800, height = 600)
+export_visualization(vis, "mean_diagram.txt", format = "txt")
+```
+
+## Using Character Voices Effectively
+
+Character voices add personality to responses. Here's how to use them effectively:
+
+### Choosing the Right Voice for Different Tasks
+
+Each voice has a distinct personality that may be better suited for different learning tasks:
+
+```{r}
+# For initial learning - enthusiastic and encouraging
+tldr("ggplot", voice = "enthusiastic_explorer")
+
+# For debugging or critical analysis
+tldr("lm", voice = "cynical_detective")
+
+# For deep understanding of complex functions
+tldr("apply", voice = "wise_mentor")
+
+# For creative or unexpected insights
+tldr("lapply", voice = "eccentric_scientist")
+
+# For humor and entertainment
+tldr("mean", voice = "theatrical_villain")
+```
+
+### Creating Voice Combinations with Context Awareness
+
+Combine voices with contextual awareness for personalized learning:
+
+```{r}
+# Personalized examples with enthusiastic voice
+tldr("filter", context = TRUE, voice = "enthusiastic_explorer")
+
+# Critical analysis of how a function applies to your data
+tldr("summarize", context = TRUE, voice = "cynical_detective")
+```
+
+## Error Handling and Troubleshooting
+
+`tldrAI` includes several features for troubleshooting:
+
+### Debug Mode
+
+Enable debug mode to see detailed information about what's happening:
+
+```{r}
+# Enable debug mode
+tldr_debug(TRUE)
+
+# Run a command to see debug information
+tldr("mean")
+
+# Disable debug mode
+tldr_debug(FALSE)
+```
+
+### Testing API Connections
+
+Test connections to providers:
+
+```{r}
+# Test connection to Claude
+tldr_test_connection("claude")
+
+# Test connection to OpenAI
+tldr_test_connection("openai")
+```
+
+### Function Details
+
+Get detailed information about a function:
+
+```{r}
+# Get function details
+tldr_function_details("mean")
+```
+
+## Workflow Optimization
+
+For the most efficient workflow:
+
+### Set Up Defaults for Your Style
+
+```{r}
+# If you prefer verbose output
+tldr_config(verbose_default = TRUE)
+
+# If you like many examples
+tldr_config(examples_default = 5)
+
+# If you always want contextual examples
+tldr_context_config(enable_context_awareness = TRUE)
+
+# If you prefer a specific character voice
+tldr_config(character_voice = "wise_mentor")
+
+# If you always want visualizations
+tldr_config(visualize = TRUE, visualization_type = "flowchart")
+```
+
+### Create Custom R Functions for Common Workflows
+
+```{r}
+# Quick tldr with your preferred settings
+quick_tldr <- function(func_name) {
+  tldr(func_name, verbose = TRUE, context = TRUE, voice = "enthusiastic_explorer")
+}
+
+# Visual tldr that always shows diagrams
+visual_tldr <- function(func_name) {
+  tldr(func_name, vis_type = "function_network", export_visualization = TRUE)
+}
+```
+
+## Conclusion
+
+The advanced features in `tldrAI` allow you to tailor the experience to your specific needs, whether you're focused on privacy, performance, visualization, or personalizing the learning experience. By combining these features, you can create a highly customized environment for exploring and understanding R functions.
+
+For any issues or feature requests, you can open a GitHub issue through:
+
+```{r}
+tldr_open_repo()
+```
