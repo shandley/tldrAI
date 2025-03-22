@@ -9,8 +9,12 @@
 #' @param async Logical indicating whether to make the API call asynchronously
 #' @param context Logical indicating whether to use contextual awareness
 #' @param visualize Logical indicating whether to include visualizations
-#' @param vis_type Character string specifying the visualization type ("diagram" or "flowchart")
+#' @param vis_type Character string specifying the visualization type ("diagram", "flowchart", "data_flow",
+#'                "function_network", or "code_highlight")
 #' @param prompt_install Logical indicating whether to prompt for installation of required packages
+#' @param export_visualization Logical indicating whether to export the visualization
+#' @param export_path Character string specifying the path to save exported visualization
+#' @param export_format Character string specifying the format for exported visualization ("svg", "png", "txt")
 #'
 #' @return Prints formatted help to the console (invisibly returns the raw response)
 #' @export
@@ -27,6 +31,14 @@
 #' tldr("mean", visualize = TRUE)  # Include visualization
 #' tldr("if", vis_type = "flowchart")  # Show a flowchart visualization
 #' tldr("lm", visualize = TRUE, prompt_install = FALSE)  # Don't prompt for installation
+#' tldr("dplyr::filter", vis_type = "data_flow")  # Show data transformation flow
+#' tldr("lm", vis_type = "function_network")  # Show related functions network
+#' tldr("mean", vis_type = "code_highlight")  # Show highlighted code
+#' 
+#' # Export visualizations
+#' tldr("mean", visualize = TRUE, export_visualization = TRUE, export_path = "mean_diagram.svg")
+#' tldr("if", vis_type = "flowchart", export_visualization = TRUE, 
+#'      export_path = "if_flowchart.png", export_format = "png")
 #' 
 #' # Load a package first to avoid function ambiguity
 #' library(ggplot2)
@@ -34,7 +46,8 @@
 #' }
 tldr <- function(func_name, verbose = NULL, examples = NULL, refresh = FALSE, 
                 provider = NULL, voice = NULL, async = NULL, context = NULL,
-                visualize = NULL, vis_type = NULL, prompt_install = TRUE) {
+                visualize = NULL, vis_type = NULL, prompt_install = TRUE,
+                export_visualization = FALSE, export_path = NULL, export_format = NULL) {
   # Validate input
   if (!is.character(func_name) || length(func_name) != 1) {
     stop("func_name must be a single character string")
@@ -331,6 +344,9 @@ tldr <- function(func_name, verbose = NULL, examples = NULL, refresh = FALSE,
       visualize = visualize,
       vis_type = vis_type,
       prompt_install = prompt_install,
+      export_visualization = export_visualization,
+      export_path = export_path,
+      export_format = export_format,
       timestamp = Sys.time()
     ), envir = .GlobalEnv)
     
@@ -373,6 +389,34 @@ tldr <- function(func_name, verbose = NULL, examples = NULL, refresh = FALSE,
   # Print formatted response
   print_tldr_response(response_obj, func_name, verbose, examples, 
                      selected_provider, voice, visualization)
+  
+  # Handle export if requested explicitly or via auto-export config
+  vis_settings <- get_config("visualization_settings", 
+                            default = list(auto_export = FALSE, 
+                                          export_format = "svg",
+                                          export_dir = getwd()))
+  
+  auto_export <- vis_settings$auto_export %||% FALSE
+  
+  if ((export_visualization || auto_export) && !is.null(visualization)) {
+    if (is.null(export_path)) {
+      # Get export directory from config or use working directory
+      export_dir <- vis_settings$export_dir %||% getwd()
+      if (!dir.exists(export_dir)) {
+        export_dir <- getwd()
+      }
+      
+      # Create a default export path if none provided
+      export_path <- file.path(export_dir, paste0(func_name, "_", vis_type))
+      
+      # Add appropriate extension based on format
+      export_fmt <- export_format %||% vis_settings$export_format %||% "svg"
+      export_path <- paste0(export_path, ".", export_fmt)
+    }
+    
+    # Perform the export
+    export_visualization(visualization, export_path, format = export_format)
+  }
   
   invisible(response_obj)
 }
@@ -465,6 +509,37 @@ tldr_check_async <- function(wait = TRUE, timeout = 30) {
                       async_req$verbose, async_req$examples, 
                       async_req$provider, async_req$voice,
                       visualization)
+    
+    # Handle export if requested explicitly or via auto-export config
+    vis_settings <- get_config("visualization_settings", 
+                               default = list(auto_export = FALSE, 
+                                             export_format = "svg",
+                                             export_dir = getwd()))
+    
+    auto_export <- vis_settings$auto_export %||% FALSE
+    
+    if (((!is.null(async_req$export_visualization) && async_req$export_visualization) || 
+        auto_export) && !is.null(visualization)) {
+      
+      export_path <- async_req$export_path
+      if (is.null(export_path)) {
+        # Get export directory from config or use working directory
+        export_dir <- vis_settings$export_dir %||% getwd()
+        if (!dir.exists(export_dir)) {
+          export_dir <- getwd()
+        }
+        
+        # Create a default export path if none provided
+        export_path <- file.path(export_dir, paste0(async_req$func_name, "_", async_req$vis_type))
+        
+        # Add appropriate extension based on format
+        export_fmt <- async_req$export_format %||% vis_settings$export_format %||% "svg"
+        export_path <- paste0(export_path, ".", export_fmt)
+      }
+      
+      # Perform the export
+      export_visualization(visualization, export_path, format = async_req$export_format)
+    }
     
     # Clean up the async request
     rm("tldr_last_async_request", envir = .GlobalEnv)

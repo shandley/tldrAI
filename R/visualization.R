@@ -11,7 +11,7 @@ VisualizationHandler <- R6::R6Class("VisualizationHandler",
     visualization_data = NULL,
     
     #' @field supported_vis_types List of supported visualization types
-    supported_vis_types = c("diagram", "flowchart"),
+    supported_vis_types = c("diagram", "flowchart", "data_flow", "function_network", "code_highlight"),
     
     #' @description Initialize a new VisualizationHandler
     #' @param settings List of visualization settings
@@ -22,7 +22,9 @@ VisualizationHandler <- R6::R6Class("VisualizationHandler",
         package = NULL,
         args = NULL,
         returns = NULL,
-        diagram = NULL
+        diagram = NULL,
+        interactive = FALSE,
+        related_functions = NULL
       )
       
       invisible(self)
@@ -172,6 +174,12 @@ VisualizationHandler <- R6::R6Class("VisualizationHandler",
         return(c("DiagrammeR"))
       } else if (type == "flowchart") {
         return(c("DiagrammeR"))
+      } else if (type == "data_flow") {
+        return(c("DiagrammeR", "htmlwidgets"))
+      } else if (type == "function_network") {
+        return(c("visNetwork", "igraph"))
+      } else if (type == "code_highlight") {
+        return(c("htmltools", "highlight"))
       } else {
         return(character(0))
       }
@@ -220,6 +228,12 @@ VisualizationHandler <- R6::R6Class("VisualizationHandler",
           vis_obj <- self$generate_function_diagram(func_name, metadata)
         } else if (vis_type == "flowchart") {
           vis_obj <- self$generate_function_flowchart(func_name, metadata)
+        } else if (vis_type == "data_flow") {
+          vis_obj <- self$generate_data_flow_diagram(func_name, metadata)
+        } else if (vis_type == "function_network") {
+          vis_obj <- self$generate_function_network(func_name, metadata)
+        } else if (vis_type == "code_highlight") {
+          vis_obj <- self$generate_code_highlight(func_name, metadata)
         }
         
         # Store the visualization
@@ -385,6 +399,369 @@ VisualizationHandler <- R6::R6Class("VisualizationHandler",
       })
     },
     
+    #' @description Generate a data flow diagram visualization
+    #' @param func_name The name of the function
+    #' @param metadata Function metadata
+    #' @return A DiagrammeR graph object or NULL if not available
+    generate_data_flow_diagram = function(func_name, metadata) {
+      if (!requireNamespace("DiagrammeR", quietly = TRUE)) {
+        return(NULL)
+      }
+      
+      if (get_config("debug_mode", default = FALSE)) {
+        message("DEBUG: Generating data flow diagram for: ", func_name)
+      }
+      
+      # Extract function details
+      args <- metadata$args %||% character(0)
+      pkg <- metadata$package %||% "unknown"
+      description <- metadata$description %||% ""
+      returns <- metadata$returns %||% "Result"
+      
+      # Detect data transformation based on package and function
+      is_dplyr <- pkg %in% c("dplyr", "tidyr", "purrr")
+      is_ggplot <- pkg %in% c("ggplot2", "ggvis")
+      is_stats <- pkg %in% c("stats", "lme4", "caret")
+      
+      # Customize diagram based on function type
+      tryCatch({
+        # Create dot language for the data flow graph
+        nodes <- paste0(
+          "digraph data_flow {\n",
+          "  graph [rankdir=LR, fontname=Arial, fontsize=12, dpi=300, bgcolor=\"#FFFFFF\", splines=true]\n",
+          "  node [fontname=Arial, fontsize=10, shape=box, style=filled, fillcolor=\"#E6F3FF\", margin=0.2]\n",
+          "  edge [fontname=Arial, fontsize=9, color=\"#333333\"]\n",
+          
+          # Add header with function name
+          "  label=\"Data Flow: ", func_name, "\"\n",
+          "  labelloc=\"t\"\n",
+          "  fontsize=14\n",
+          "  fontname=\"Arial-Bold\"\n\n"
+        )
+        
+        # Add input nodes with appropriate styling
+        nodes <- paste0(nodes, 
+          "  subgraph cluster_inputs {\n",
+          "    label=\"Inputs\"\n",
+          "    style=filled\n",
+          "    color=\"#EAEAEA\"\n",
+          "    fillcolor=\"#F5F5F5\"\n"
+        )
+        
+        for (i in seq_along(args)) {
+          nodes <- paste0(nodes, 
+            "    input", i, " [label=\"", args[i], "\", shape=box, fillcolor=\"#DAE8FC\"]\n"
+          )
+        }
+        nodes <- paste0(nodes, "  }\n\n")
+        
+        # Add processing steps
+        nodes <- paste0(nodes, 
+          "  subgraph cluster_processing {\n",
+          "    label=\"Processing\"\n",
+          "    style=filled\n",
+          "    color=\"#EAEAEA\"\n",
+          "    fillcolor=\"#F5F5F5\"\n",
+          "    node [fillcolor=\"#94C9FF\"]\n"
+        )
+        
+        # Customize processing based on package type
+        if (is_dplyr) {
+          nodes <- paste0(nodes,
+            "    transform [label=\"Data Transformation\"]\n",
+            "    filter [label=\"Filter/Select Data\"]\n",
+            "    summarize [label=\"Aggregation\"]\n"
+          )
+        } else if (is_ggplot) {
+          nodes <- paste0(nodes,
+            "    data_mapping [label=\"Map Data to Aesthetics\"]\n",
+            "    geom [label=\"Add Geometric Elements\"]\n",
+            "    theme [label=\"Apply Theme\"]\n"
+          )
+        } else if (is_stats) {
+          nodes <- paste0(nodes, 
+            "    model [label=\"Fit Statistical Model\"]\n",
+            "    estimate [label=\"Calculate Estimates\"]\n",
+            "    diagnose [label=\"Diagnostic Checks\"]\n"
+          )
+        } else {
+          # Generic processing for other function types
+          nodes <- paste0(nodes,
+            "    process1 [label=\"Process Arguments\"]\n",
+            "    process2 [label=\"Apply Function Logic\"]\n",
+            "    process3 [label=\"Prepare Output\"]\n"
+          )
+        }
+        nodes <- paste0(nodes, "  }\n\n")
+        
+        # Add output nodes
+        nodes <- paste0(nodes, 
+          "  subgraph cluster_outputs {\n",
+          "    label=\"Outputs\"\n",
+          "    style=filled\n",
+          "    color=\"#EAEAEA\"\n",
+          "    fillcolor=\"#F5F5F5\"\n",
+          "    output [label=\"", returns, "\", shape=box, fillcolor=\"#D5E8D4\"]\n",
+          "  }\n\n"
+        )
+        
+        # Add edges connecting inputs to processes
+        for (i in seq_along(args)) {
+          if (is_dplyr) {
+            nodes <- paste0(nodes, "  input", i, " -> transform\n")
+          } else if (is_ggplot) {
+            nodes <- paste0(nodes, "  input", i, " -> data_mapping\n")
+          } else if (is_stats) {
+            nodes <- paste0(nodes, "  input", i, " -> model\n")
+          } else {
+            nodes <- paste0(nodes, "  input", i, " -> process1\n")
+          }
+        }
+        
+        # Add edges connecting processes
+        if (is_dplyr) {
+          nodes <- paste0(nodes,
+            "  transform -> filter\n",
+            "  filter -> summarize\n",
+            "  summarize -> output\n"
+          )
+        } else if (is_ggplot) {
+          nodes <- paste0(nodes,
+            "  data_mapping -> geom\n",
+            "  geom -> theme\n",
+            "  theme -> output\n"
+          )
+        } else if (is_stats) {
+          nodes <- paste0(nodes,
+            "  model -> estimate\n",
+            "  estimate -> diagnose\n",
+            "  diagnose -> output\n"
+          )
+        } else {
+          nodes <- paste0(nodes,
+            "  process1 -> process2\n",
+            "  process2 -> process3\n",
+            "  process3 -> output\n"
+          )
+        }
+        
+        # Close the graph
+        nodes <- paste0(nodes, "}\n")
+        
+        # Create graph using DiagrammeR
+        graph <- DiagrammeR::grViz(nodes)
+        
+        # Make the visualization interactive if htmlwidgets is available
+        if (requireNamespace("htmlwidgets", quietly = TRUE)) {
+          # Add interactivity to the graph
+          graph <- htmlwidgets::onRender(graph, '
+            function(el, x) {
+              // Add tooltips to nodes
+              d3.select(el).selectAll(".node")
+                .append("title")
+                .text(function(d) { return d.label; });
+                
+              // Make nodes clickable
+              d3.select(el).selectAll(".node")
+                .style("cursor", "pointer")
+                .on("click", function(d) {
+                  alert("Node: " + d.label);
+                });
+            }
+          ')
+          self$visualization_data$interactive <- TRUE
+        }
+        
+        return(graph)
+      }, error = function(e) {
+        if (get_config("debug_mode", default = FALSE)) {
+          message("DEBUG: Error generating data flow diagram: ", e$message)
+        }
+        return(NULL)
+      })
+    },
+    
+    #' @description Generate a function network visualization
+    #' @param func_name The name of the function
+    #' @param metadata Function metadata
+    #' @return A visNetwork graph object or NULL if not available
+    generate_function_network = function(func_name, metadata) {
+      # Check required packages
+      if (!requireNamespace("visNetwork", quietly = TRUE) || 
+          !requireNamespace("igraph", quietly = TRUE)) {
+        return(NULL)
+      }
+      
+      if (get_config("debug_mode", default = FALSE)) {
+        message("DEBUG: Generating function network for: ", func_name)
+      }
+      
+      # Extract package information
+      pkg <- metadata$package %||% "unknown"
+      
+      tryCatch({
+        # Find related functions from the same package
+        related_functions <- self$find_related_functions(func_name, pkg)
+        self$visualization_data$related_functions <- related_functions
+        
+        # Prepare nodes and edges data
+        nodes <- data.frame(
+          id = c(func_name, related_functions$functions),
+          label = c(func_name, related_functions$functions),
+          group = c("main", rep("related", length(related_functions$functions))),
+          title = c(
+            paste0("Main function: ", func_name),
+            related_functions$descriptions
+          ),
+          shadow = c(TRUE, rep(FALSE, length(related_functions$functions))),
+          shape = c("box", rep("box", length(related_functions$functions))),
+          stringsAsFactors = FALSE
+        )
+        
+        # Set node colors based on group
+        nodes$color.background <- ifelse(nodes$group == "main", "#D2E5FF", "#F8F8F8")
+        nodes$color.border <- ifelse(nodes$group == "main", "#2B7CE9", "#CCCCCC") 
+        nodes$color.highlight.background <- "#FFFF99"
+        nodes$fontStyle <- ifelse(nodes$group == "main", "bold", "normal")
+        
+        # Create edges
+        edges <- data.frame(
+          from = rep(func_name, length(related_functions$functions)),
+          to = related_functions$functions,
+          arrows = "to",
+          smooth = TRUE,
+          title = related_functions$relationships,
+          stringsAsFactors = FALSE
+        )
+        
+        # Additional edges between related functions
+        if (nrow(edges) > 1) {
+          # Try to find connections between related functions
+          additional_edges <- self$find_connections_between_related(related_functions$functions, pkg)
+          if (nrow(additional_edges) > 0) {
+            edges <- rbind(edges, additional_edges)
+          }
+        }
+        
+        # Create interactive network graph
+        network <- visNetwork::visNetwork(nodes, edges, width = "100%", height = "500px") %>%
+          visNetwork::visOptions(
+            highlightNearest = list(enabled = TRUE, degree = 1, hover = TRUE),
+            nodesIdSelection = TRUE,
+            selectedBy = "group"
+          ) %>%
+          visNetwork::visInteraction(
+            tooltipDelay = 0,
+            hideEdgesOnDrag = FALSE,
+            navigationButtons = TRUE
+          ) %>%
+          visNetwork::visLayout(randomSeed = 123) %>%
+          visNetwork::addFontAwesome() %>%
+          visNetwork::visPhysics(
+            solver = "forceAtlas2Based",
+            forceAtlas2Based = list(gravitationalConstant = -50)
+          )
+        
+        # Save that this is an interactive visualization
+        self$visualization_data$interactive <- TRUE
+        
+        return(network)
+      }, error = function(e) {
+        if (get_config("debug_mode", default = FALSE)) {
+          message("DEBUG: Error generating function network: ", e$message)
+        }
+        return(NULL)
+      })
+    },
+    
+    #' @description Generate enhanced code highlighting visualization
+    #' @param func_name The name of the function
+    #' @param metadata Function metadata
+    #' @return An HTML widget or NULL if not available
+    generate_code_highlight = function(func_name, metadata) {
+      # Check required packages
+      if (!requireNamespace("htmltools", quietly = TRUE) ||
+          !requireNamespace("highlight", quietly = TRUE)) {
+        return(NULL)
+      }
+      
+      if (get_config("debug_mode", default = FALSE)) {
+        message("DEBUG: Generating code highlight visualization for: ", func_name)
+      }
+      
+      tryCatch({
+        # Extract function body
+        body_code <- metadata$body %||% ""
+        if (body_code == "") {
+          # If body is not available, try to get the function code
+          body_code <- self$get_function_source(func_name, metadata$package)
+        }
+        
+        if (body_code == "") {
+          return(NULL)
+        }
+        
+        # Parse and format the code
+        formatted_code <- highlight::highlight(
+          parse(text = body_code),
+          renderer = highlight::renderer_html(document = FALSE),
+          output = NULL
+        )
+        
+        # Add collapsible sections for complex code
+        if (nchar(body_code) > 500) {
+          # Create sections for long code
+          formatted_code <- self$create_collapsible_code_sections(formatted_code)
+        }
+        
+        # Create an HTML widget
+        widget <- htmltools::HTML(paste0(
+          "<div class='tldr-code-highlight' style='background-color: #f8f8f8; padding: 10px; border-radius: 5px; border: 1px solid #ddd;'>",
+          "<h3 style='color: #333; margin-top: 0;'>", func_name, " Source Code</h3>",
+          "<div class='code-container' style='font-family: monospace; white-space: pre; overflow-x: auto; max-height: 500px;'>",
+          formatted_code,
+          "</div>",
+          "<div class='code-footer' style='margin-top: 10px; font-size: 0.9em; color: #666;'>",
+          "Package: ", metadata$package, " | Click on code sections to expand/collapse",
+          "</div>",
+          "</div>"
+        ))
+        
+        # Make it interactive if displayed in RStudio viewer
+        interactive_widget <- htmltools::tags$div(
+          htmltools::tags$style(
+            ".code-section-toggle { cursor: pointer; background-color: #eaeaea; padding: 5px; margin: 5px 0; }",
+            ".code-section-toggle:hover { background-color: #d3d3d3; }",
+            ".code-section-content { display: none; }",
+            ".code-line { display: block; padding-left: 20px; }",
+            ".line-highlight { background-color: #ffff99; }"
+          ),
+          htmltools::tags$script(
+            "$(document).ready(function() {
+              $('.code-section-toggle').click(function() {
+                $(this).next('.code-section-content').toggle();
+              });
+              
+              $('.code-line').hover(
+                function() { $(this).addClass('line-highlight'); },
+                function() { $(this).removeClass('line-highlight'); }
+              );
+            });"
+          ),
+          widget
+        )
+        
+        self$visualization_data$interactive <- TRUE
+        
+        return(interactive_widget)
+      }, error = function(e) {
+        if (get_config("debug_mode", default = FALSE)) {
+          message("DEBUG: Error generating code highlight: ", e$message)
+        }
+        return(NULL)
+      })
+    },
+    
     #' @description Get SVG code for the visualization
     #' @return Character string with SVG code or NULL if not available
     get_svg = function() {
@@ -430,6 +807,12 @@ VisualizationHandler <- R6::R6Class("VisualizationHandler",
         return(self$generate_ascii_diagram(func_name, metadata))
       } else if (vis_type == "flowchart") {
         return(self$generate_ascii_flowchart(func_name, metadata))
+      } else if (vis_type == "data_flow") {
+        return(self$generate_ascii_data_flow(func_name, metadata))
+      } else if (vis_type == "function_network") {
+        return(self$generate_ascii_function_network(func_name, metadata))
+      } else if (vis_type == "code_highlight") {
+        return(self$generate_ascii_code_highlight(func_name, metadata))
       } else {
         # Generic fallback
         return(paste0(
@@ -636,6 +1019,622 @@ VisualizationHandler <- R6::R6Class("VisualizationHandler",
       }
       
       return(viz)
+    },
+    
+    #' @description Generate an ASCII data flow visualization
+    #' @param func_name The name of the function
+    #' @param metadata Function metadata
+    #' @return A character string with ASCII data flow diagram
+    generate_ascii_data_flow = function(func_name, metadata) {
+      pkg <- metadata$package %||% "Unknown"
+      args <- metadata$args %||% character(0)
+      
+      # Determine function type for customization
+      is_dplyr <- pkg %in% c("dplyr", "tidyr", "purrr")
+      is_ggplot <- pkg %in% c("ggplot2", "ggvis")
+      is_stats <- pkg %in% c("stats", "lme4", "caret")
+      
+      # Create header
+      header <- paste0(
+        "╭─ Data Flow Diagram: ", func_name, " (", pkg, ") ─╮\n"
+      )
+      
+      # Create input section
+      inputs <- "│ Inputs:                               │\n"
+      if (length(args) > 0) {
+        for (arg in args) {
+          if (nchar(arg) > 35) {
+            arg <- paste0(substr(arg, 1, 32), "...")
+          }
+          inputs <- paste0(inputs, "│   ● ", sprintf("%-33s", arg), "│\n")
+        }
+      } else {
+        inputs <- paste0(inputs, "│   None                               │\n")
+      }
+      
+      # Create processing steps based on function type
+      processing <- "│                                     │\n│ Processing:                           │\n"
+      
+      if (is_dplyr) {
+        processing <- paste0(processing,
+          "│   1. ", sprintf("%-33s", "Data Transformation"), "│\n",
+          "│   2. ", sprintf("%-33s", "Filter/Select Data"), "│\n",
+          "│   3. ", sprintf("%-33s", "Aggregation"), "│\n"
+        )
+      } else if (is_ggplot) {
+        processing <- paste0(processing,
+          "│   1. ", sprintf("%-33s", "Map Data to Aesthetics"), "│\n",
+          "│   2. ", sprintf("%-33s", "Add Geometric Elements"), "│\n",
+          "│   3. ", sprintf("%-33s", "Apply Theme"), "│\n"
+        )
+      } else if (is_stats) {
+        processing <- paste0(processing,
+          "│   1. ", sprintf("%-33s", "Fit Statistical Model"), "│\n",
+          "│   2. ", sprintf("%-33s", "Calculate Estimates"), "│\n",
+          "│   3. ", sprintf("%-33s", "Diagnostic Checks"), "│\n"
+        )
+      } else {
+        processing <- paste0(processing,
+          "│   1. ", sprintf("%-33s", "Process Arguments"), "│\n",
+          "│   2. ", sprintf("%-33s", "Apply Function Logic"), "│\n",
+          "│   3. ", sprintf("%-33s", "Prepare Output"), "│\n"
+        )
+      }
+      
+      # Create output section
+      outputs <- "│                                     │\n│ Output:                               │\n"
+      outputs <- paste0(outputs, "│   ● ", sprintf("%-33s", "Return Value"), "│\n")
+      
+      # Create data flow
+      flow <- "│                                     │\n│ Data Flow:                            │\n"
+      flow <- paste0(flow,
+        "│   Inputs ──> Processing ──> Output      │\n"
+      )
+      
+      # Footer
+      footer <- paste0(
+        "╰─────────────────────────────────────╯\n\n",
+        "Note: This is a text-based visualization.\n",
+        "For graphical visualizations, install required packages:\n",
+        "install.packages(\"", paste(self$get_required_packages(vis_type = "data_flow"), collapse = "\", \""), "\")"
+      )
+      
+      # Combine all parts
+      viz <- paste0(
+        header,
+        inputs,
+        processing,
+        outputs,
+        flow,
+        footer
+      )
+      
+      return(viz)
+    },
+    
+    #' @description Generate an ASCII function network visualization
+    #' @param func_name The name of the function
+    #' @param metadata Function metadata
+    #' @return A character string with ASCII function network
+    generate_ascii_function_network = function(func_name, metadata) {
+      pkg <- metadata$package %||% "Unknown"
+      
+      # Create header
+      header <- paste0(
+        "╭─ Function Network: ", func_name, " (", pkg, ") ─╮\n"
+      )
+      
+      # Find related functions (simplified ASCII version)
+      related <- character(0)
+      if (pkg != "Unknown") {
+        # Attempt to find a few related functions for ASCII art
+        if (pkg == "dplyr") {
+          related <- c("filter", "select", "mutate", "summarize", "group_by")
+        } else if (pkg == "ggplot2") {
+          related <- c("ggplot", "geom_point", "geom_line", "aes", "theme")
+        } else if (pkg == "stats") {
+          related <- c("lm", "glm", "t.test", "anova", "predict")
+        } else if (pkg == "base") {
+          related <- c("sum", "mean", "apply", "sapply", "lapply")
+        } else {
+          # Generic related functions when we can't determine actual relationships
+          related <- c("related_func1", "related_func2", "related_func3")
+        }
+      }
+      
+      # Create central function node
+      central <- paste0(
+        "│                                      │\n",
+        "│              ┌────────┐              │\n",
+        "│              │ ", sprintf("%-6s", func_name), " │              │\n",
+        "│              └────────┘              │\n"
+      )
+      
+      # Create connections to related functions
+      connections <- "│                                      │\n"
+      if (length(related) > 0) {
+        # Draw simplified connections for ASCII art
+        connections <- paste0(connections,
+          "│      ┌───────┴┬─────┴┬───────┐      │\n",
+          "│      │        │      │        │      │\n",
+          "│      ▼        ▼      ▼        ▼      │\n"
+        )
+        
+        # Format related functions in a row
+        related_line1 <- "│  "
+        related_line2 <- "│  "
+        related_line3 <- "│  "
+        
+        # Add up to 4 related functions in a row
+        max_related <- min(4, length(related))
+        for (i in 1:max_related) {
+          func <- related[i]
+          if (nchar(func) > 8) {
+            func <- paste0(substr(func, 1, 6), "..")
+          }
+          
+          related_line1 <- paste0(related_line1, " ┌────────┐ ")
+          related_line2 <- paste0(related_line2, " │ ", sprintf("%-6s", func), " │ ")
+          related_line3 <- paste0(related_line3, " └────────┘ ")
+        }
+        
+        # Pad the lines to fill width
+        related_line1 <- paste0(sprintf("%-36s", related_line1), "│\n")
+        related_line2 <- paste0(sprintf("%-36s", related_line2), "│\n")
+        related_line3 <- paste0(sprintf("%-36s", related_line3), "│\n")
+        
+        connections <- paste0(connections, related_line1, related_line2, related_line3)
+      } else {
+        connections <- paste0(connections,
+          "│     (No related functions found)      │\n"
+        )
+      }
+      
+      # Footer
+      footer <- paste0(
+        "╰──────────────────────────────────────╯\n\n",
+        "Note: This is a text-based visualization.\n",
+        "For graphical visualizations, install required packages:\n",
+        "install.packages(\"", paste(self$get_required_packages(vis_type = "function_network"), collapse = "\", \""), "\")"
+      )
+      
+      # Combine all parts
+      viz <- paste0(
+        header,
+        central,
+        connections,
+        footer
+      )
+      
+      return(viz)
+    },
+    
+    #' @description Generate an ASCII code highlighting visualization
+    #' @param func_name The name of the function
+    #' @param metadata Function metadata
+    #' @return A character string with ASCII highlighted code
+    generate_ascii_code_highlight = function(func_name, metadata) {
+      pkg <- metadata$package %||% "Unknown"
+      
+      # Create header
+      header <- paste0(
+        "╭─ Code Highlight: ", func_name, " (", pkg, ") ─╮\n"
+      )
+      
+      # Get function code for display
+      body_code <- metadata$body %||% ""
+      if (body_code == "") {
+        # If body is not available, show placeholder
+        body_code <- "# Source code not available\n# Install the package to view actual code"
+      }
+      
+      # Format the code for display (limit to ~15 lines)
+      code_lines <- strsplit(body_code, "\n")[[1]]
+      if (length(code_lines) > 15) {
+        code_lines <- c(code_lines[1:10], "# ... (truncated) ...", code_lines[(length(code_lines)-3):length(code_lines)])
+      }
+      
+      # Format code with line numbers
+      code_display <- ""
+      for (i in seq_along(code_lines)) {
+        line <- code_lines[i]
+        # Ensure line isn't too long
+        if (nchar(line) > 32) {
+          line <- paste0(substr(line, 1, 29), "...")
+        }
+        code_display <- paste0(code_display, "│ ", sprintf("%2d", i), " ", sprintf("%-33s", line), "│\n")
+      }
+      
+      # Footer
+      footer <- paste0(
+        "╰───────────────────────────────────────╯\n\n",
+        "Note: This is a text-based visualization.\n",
+        "For graphical visualizations with syntax highlighting and interactive features, install:\n",
+        "install.packages(\"", paste(self$get_required_packages(vis_type = "code_highlight"), collapse = "\", \""), "\")"
+      )
+      
+      # Combine all parts
+      viz <- paste0(
+        header,
+        code_display,
+        footer
+      )
+      
+      return(viz)
+    },
+    
+    #' @description Find related functions in the same package
+    #' @param func_name The name of the function
+    #' @param pkg The package name
+    #' @return A list with related functions and their descriptions
+    find_related_functions = function(func_name, pkg) {
+      # Initialize empty result
+      result <- list(
+        functions = character(0),
+        descriptions = character(0),
+        relationships = character(0)
+      )
+      
+      # Skip if package is unknown
+      if (is.null(pkg) || pkg == "unknown" || pkg == "Unknown") {
+        return(result)
+      }
+      
+      tryCatch({
+        # Check if the package is installed
+        if (!requireNamespace(pkg, quietly = TRUE)) {
+          return(result)
+        }
+        
+        # Get exported functions from package
+        pkg_ns <- getNamespace(pkg)
+        exports <- tryCatch(getNamespaceExports(pkg_ns), error = function(e) character(0))
+        
+        if (length(exports) == 0) {
+          return(result)
+        }
+        
+        # Filter out the current function
+        exports <- exports[exports != func_name]
+        
+        # Limit the number of related functions
+        max_related <- min(10, length(exports))
+        if (max_related == 0) {
+          return(result)
+        }
+        
+        selected <- sample(exports, max_related)
+        
+        # Get descriptions (when possible)
+        descriptions <- character(length(selected))
+        relationships <- character(length(selected))
+        
+        for (i in seq_along(selected)) {
+          func <- selected[i]
+          # Try to get description from help
+          help_text <- tryCatch({
+            utils::capture.output(utils::help(func, package = pkg))
+          }, error = function(e) character(0))
+          
+          if (length(help_text) > 0) {
+            # Extract a very brief description
+            desc_line <- grep("Description:", help_text, fixed = TRUE)
+            if (length(desc_line) > 0 && desc_line[1] < length(help_text)) {
+              desc <- help_text[desc_line[1] + 1]
+              if (nchar(desc) > 0) {
+                desc <- trimws(desc)
+                if (nchar(desc) > 40) {
+                  desc <- paste0(substr(desc, 1, 37), "...")
+                }
+                descriptions[i] <- desc
+              } else {
+                descriptions[i] <- paste0("Function in package ", pkg)
+              }
+            } else {
+              descriptions[i] <- paste0("Function in package ", pkg)
+            }
+          } else {
+            descriptions[i] <- paste0("Function in package ", pkg)
+          }
+          
+          # Create a simple relationship description
+          relationships[i] <- paste0("Related function in ", pkg, " package")
+        }
+        
+        result$functions <- selected
+        result$descriptions <- descriptions
+        result$relationships <- relationships
+        
+        return(result)
+      }, error = function(e) {
+        if (get_config("debug_mode", default = FALSE)) {
+          message("DEBUG: Error finding related functions: ", e$message)
+        }
+        return(result)
+      })
+    },
+    
+    #' @description Find connections between related functions
+    #' @param related_funcs Character vector of related function names
+    #' @param pkg The package name
+    #' @return A data frame of edges between related functions
+    find_connections_between_related = function(related_funcs, pkg) {
+      # Initialize empty edges data frame
+      edges <- data.frame(
+        from = character(0),
+        to = character(0),
+        arrows = character(0),
+        smooth = logical(0),
+        title = character(0),
+        stringsAsFactors = FALSE
+      )
+      
+      # We need at least 2 functions to create connections
+      if (length(related_funcs) < 2) {
+        return(edges)
+      }
+      
+      tryCatch({
+        # Generate some connections (in a real implementation, these would be based on actual analysis)
+        # For now, we'll create a few random connections for demonstration
+        n_connections <- min(5, length(related_funcs))
+        
+        for (i in 1:n_connections) {
+          from_idx <- sample(1:length(related_funcs), 1)
+          to_idx <- sample((1:length(related_funcs))[-from_idx], 1)
+          
+          from_func <- related_funcs[from_idx]
+          to_func <- related_funcs[to_idx]
+          
+          new_edge <- data.frame(
+            from = from_func,
+            to = to_func,
+            arrows = "to",
+            smooth = TRUE,
+            title = paste0("May be used together with ", from_func),
+            stringsAsFactors = FALSE
+          )
+          
+          edges <- rbind(edges, new_edge)
+        }
+        
+        return(edges)
+      }, error = function(e) {
+        return(edges)
+      })
+    },
+    
+    #' @description Get source code for a function
+    #' @param func_name The name of the function
+    #' @param pkg The package name
+    #' @return Character string with the function source code
+    get_function_source = function(func_name, pkg) {
+      tryCatch({
+        if (!is.null(pkg) && pkg != "unknown" && pkg != "Unknown") {
+          # Get function from package
+          func_obj <- getExportedValue(pkg, func_name)
+        } else {
+          # Try to get function from global environment
+          func_obj <- get(func_name, envir = .GlobalEnv)
+        }
+        
+        # Get source code
+        if (is.function(func_obj)) {
+          src <- deparse(func_obj)
+          return(paste(src, collapse = "\n"))
+        }
+      }, error = function(e) {
+        return("")
+      })
+      
+      return("")
+    },
+    
+    #' @description Create collapsible sections for complex code
+    #' @param code_html The HTML formatted code
+    #' @return HTML string with collapsible sections
+    create_collapsible_code_sections = function(code_html) {
+      # This would do complex parsing of HTML in a real implementation
+      # For simplicity here, we'll just wrap the code in a collapsible structure
+      
+      # Split the code into logical sections (simplified approach)
+      # In a real implementation, this would parse the HTML and identify function definitions,
+      # control structures, etc.
+      
+      # Simplified approach: just create an initial collapsed section
+      collapsible_code <- paste0(
+        "<div class='code-section-toggle'>Click to expand/collapse code</div>",
+        "<div class='code-section-content'>",
+        code_html,
+        "</div>"
+      )
+      
+      return(collapsible_code)
+    },
+    
+    #' @description Export visualization as SVG
+    #' @param file_path The path to save the SVG file
+    #' @return Logical indicating success
+    export_svg = function(file_path) {
+      vis <- self$visualization_data$diagram
+      vis_type <- self$visualization_data$vis_type
+      
+      if (is.null(vis)) {
+        stop("No visualization available to export.")
+      }
+      
+      # Check if this is a fallback ASCII visualization
+      if (is.character(vis) && substr(vis_type, 1, 9) == "fallback_") {
+        # For ASCII fallback, save as text
+        return(self$export_ascii(file_path))
+      }
+      
+      # Check for required packages
+      if (!requireNamespace("DiagrammeR", quietly = TRUE) ||
+          !requireNamespace("htmlwidgets", quietly = TRUE)) {
+        stop("SVG export requires the DiagrammeR and htmlwidgets packages.")
+      }
+      
+      tryCatch({
+        # Export the visualization as SVG
+        if (inherits(vis, "htmlwidget")) {
+          # For DiagrammeR graphs
+          if (requireNamespace("DiagrammeRsvg", quietly = TRUE) && 
+              (vis_type %in% c("diagram", "flowchart", "data_flow"))) {
+            # Convert to SVG
+            svg_code <- DiagrammeRsvg::export_svg(vis)
+            # Write SVG to file
+            writeLines(svg_code, file_path)
+            return(TRUE)
+          } else if (vis_type == "function_network" && requireNamespace("visNetwork", quietly = TRUE)) {
+            # For visNetwork graphs
+            svg_code <- visNetwork::visExport(vis, type = "svg")
+            # This doesn't write to file directly, but returns SVG code
+            writeLines(svg_code, file_path)
+            return(TRUE)
+          } else if (vis_type == "code_highlight") {
+            # For HTML widgets (code highlighting)
+            svg_code <- paste0("<svg>", as.character(vis), "</svg>")
+            writeLines(svg_code, file_path)
+            return(TRUE)
+          }
+        }
+        
+        # Default fallback if specific export not available
+        stop("SVG export not supported for this visualization type.")
+      }, error = function(e) {
+        warning("Error exporting to SVG: ", e$message)
+        return(FALSE)
+      })
+    },
+    
+    #' @description Export visualization as PNG
+    #' @param file_path The path to save the PNG file
+    #' @param width The width of the PNG in pixels
+    #' @param height The height of the PNG in pixels
+    #' @return Logical indicating success
+    export_png = function(file_path, width = 800, height = 600) {
+      vis <- self$visualization_data$diagram
+      vis_type <- self$visualization_data$vis_type
+      
+      if (is.null(vis)) {
+        stop("No visualization available to export.")
+      }
+      
+      # Check if this is a fallback ASCII visualization
+      if (is.character(vis) && substr(vis_type, 1, 9) == "fallback_") {
+        # For ASCII fallback, save as text
+        warning("Cannot export ASCII visualization as PNG. Saving as TXT instead.")
+        return(self$export_ascii(file_path))
+      }
+      
+      # Check for required packages
+      if (!requireNamespace("htmlwidgets", quietly = TRUE) ||
+          !requireNamespace("webshot", quietly = TRUE)) {
+        stop("PNG export requires the htmlwidgets and webshot packages.")
+      }
+      
+      tryCatch({
+        # Create a temporary HTML file
+        temp_html <- tempfile(fileext = ".html")
+        
+        # Save the widget to a temporary HTML file
+        htmlwidgets::saveWidget(vis, temp_html, selfcontained = TRUE)
+        
+        # Use webshot to capture a PNG
+        webshot::webshot(temp_html, file_path, vwidth = width, vheight = height)
+        
+        # Clean up the temporary file
+        if (file.exists(temp_html)) {
+          unlink(temp_html)
+        }
+        
+        return(TRUE)
+      }, error = function(e) {
+        warning("Error exporting to PNG: ", e$message)
+        return(FALSE)
+      })
+    },
+    
+    #' @description Export visualization as ASCII text
+    #' @param file_path The path to save the text file
+    #' @return Logical indicating success
+    export_ascii = function(file_path) {
+      vis <- self$visualization_data$diagram
+      vis_type <- self$visualization_data$vis_type
+      
+      if (is.null(vis)) {
+        stop("No visualization available to export.")
+      }
+      
+      tryCatch({
+        # If it's already an ASCII representation (string)
+        if (is.character(vis)) {
+          writeLines(vis, file_path)
+          return(TRUE)
+        }
+        
+        # Generate an ASCII version based on vis_type
+        ascii_vis <- NULL
+        
+        if (vis_type == "diagram") {
+          ascii_vis <- self$generate_ascii_diagram(
+            self$visualization_data$func_name,
+            list(
+              package = self$visualization_data$package,
+              args = self$visualization_data$args
+            )
+          )
+        } else if (vis_type == "flowchart") {
+          ascii_vis <- self$generate_ascii_flowchart(
+            self$visualization_data$func_name,
+            list(
+              package = self$visualization_data$package,
+              body_summary = "" # We don't have this info here
+            )
+          )
+        } else if (vis_type == "data_flow") {
+          ascii_vis <- self$generate_ascii_data_flow(
+            self$visualization_data$func_name,
+            list(
+              package = self$visualization_data$package,
+              args = self$visualization_data$args
+            )
+          )
+        } else if (vis_type == "function_network") {
+          ascii_vis <- self$generate_ascii_function_network(
+            self$visualization_data$func_name,
+            list(
+              package = self$visualization_data$package
+            )
+          )
+        } else if (vis_type == "code_highlight") {
+          ascii_vis <- self$generate_ascii_code_highlight(
+            self$visualization_data$func_name,
+            list(
+              package = self$visualization_data$package,
+              body = "" # We don't have this info here
+            )
+          )
+        } else {
+          # Generic export for unknown types
+          ascii_vis <- paste0(
+            "Function: ", self$visualization_data$func_name, "\n",
+            "Package: ", self$visualization_data$package %||% "Unknown", "\n",
+            "Arguments: ", paste(self$visualization_data$args %||% "None", collapse = ", "), "\n"
+          )
+        }
+        
+        if (!is.null(ascii_vis)) {
+          writeLines(ascii_vis, file_path)
+          return(TRUE)
+        } else {
+          stop("Failed to generate ASCII representation.")
+        }
+      }, error = function(e) {
+        warning("Error exporting to TXT: ", e$message)
+        return(FALSE)
+      })
     }
   ),
   
@@ -731,11 +1730,75 @@ print_visualization <- function(visualization) {
   invisible(visualization)
 }
 
+#' Export a visualization to a file
+#'
+#' @param visualization A visualization handler object
+#' @param file_path Character string specifying the file path to save the visualization
+#' @param format Character string specifying the export format ("svg", "png", "txt")
+#' @param width Numeric value specifying the width of the exported image in pixels
+#' @param height Numeric value specifying the height of the exported image in pixels
+#'
+#' @return Invisibly returns the visualization handler
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' metadata <- get_function_metadata("mean")
+#' vis <- create_visualization("mean", metadata)
+#' export_visualization(vis, "mean_diagram.svg")
+#' export_visualization(vis, "mean_diagram.png", width = 800, height = 600)
+#' export_visualization(vis, "mean_diagram.txt", format = "txt")
+#' }
+export_visualization <- function(visualization, file_path, format = NULL, width = 800, height = 600) {
+  if (!inherits(visualization, "VisualizationHandler")) {
+    stop("Visualization must be a VisualizationHandler object.")
+  }
+  
+  # Determine format from file extension if not specified
+  if (is.null(format)) {
+    ext <- tolower(tools::file_ext(file_path))
+    if (ext %in% c("svg", "png", "txt")) {
+      format <- ext
+    } else {
+      stop("Unable to determine format from file extension. Please specify format parameter.")
+    }
+  }
+  
+  # Validate format
+  if (!format %in% c("svg", "png", "txt")) {
+    stop("Format must be one of: svg, png, txt")
+  }
+  
+  # Export based on format
+  result <- tryCatch({
+    if (format == "svg") {
+      visualization$export_svg(file_path)
+    } else if (format == "png") {
+      visualization$export_png(file_path, width = width, height = height)
+    } else if (format == "txt") {
+      visualization$export_ascii(file_path)
+    }
+    TRUE
+  }, error = function(e) {
+    message("Error exporting visualization: ", e$message)
+    FALSE
+  })
+  
+  if (result) {
+    message("Visualization exported successfully to: ", file_path)
+  }
+  
+  invisible(visualization)
+}
+
 #' Configure visualization settings
 #'
 #' @param enable Logical indicating whether to enable visualizations
 #' @param default_type Character string specifying the default visualization type
 #' @param auto_install Logical indicating whether to automatically install required packages
+#' @param auto_export Logical indicating whether to automatically export visualizations
+#' @param export_format Character string specifying the default export format
+#' @param export_dir Character string specifying the default directory for exported visualizations
 #'
 #' @return Invisibly returns the updated configuration
 #' @export
@@ -743,8 +1806,11 @@ print_visualization <- function(visualization) {
 #' @examples
 #' \dontrun{
 #' tldr_visualization_config(enable = TRUE, default_type = "diagram")
+#' tldr_visualization_config(auto_export = TRUE, export_format = "svg")
+#' tldr_visualization_config(export_dir = "~/R/visualizations")
 #' }
-tldr_visualization_config <- function(enable = NULL, default_type = NULL, auto_install = NULL) {
+tldr_visualization_config <- function(enable = NULL, default_type = NULL, auto_install = NULL,
+                                    auto_export = NULL, export_format = NULL, export_dir = NULL) {
   # Get current configuration
   config <- get_config_all()
   
@@ -772,10 +1838,61 @@ tldr_visualization_config <- function(enable = NULL, default_type = NULL, auto_i
       default_type <- "diagram"
     }
     config$visualization_settings$default_type <- default_type
+    
+    # Display information about the selected visualization type
+    message("\nVisualization type '", default_type, "' selected:")
+    if (default_type == "diagram") {
+      message("  - Simple function diagram showing inputs and outputs")
+      message("  - Best for basic function understanding")
+    } else if (default_type == "flowchart") {
+      message("  - Logical flow diagram showing conditionals and loops")
+      message("  - Best for understanding function processing flow")
+    } else if (default_type == "data_flow") {
+      message("  - Data transformation diagram")
+      message("  - Best for data processing functions (dplyr, ggplot2, etc.)")
+    } else if (default_type == "function_network") {
+      message("  - Network diagram showing related functions")
+      message("  - Best for understanding function relationships in packages")
+    } else if (default_type == "code_highlight") {
+      message("  - Syntax highlighted code with interactive elements")
+      message("  - Best for examining function implementation details")
+    }
   }
   
   if (!is.null(auto_install)) {
     config$visualization_settings$auto_install <- auto_install
+  }
+  
+  # Handle new export settings
+  if (!is.null(auto_export)) {
+    config$visualization_settings$auto_export <- auto_export
+  }
+  
+  if (!is.null(export_format)) {
+    # Validate export format
+    if (!export_format %in% c("svg", "png", "txt")) {
+      warning("Unsupported export format: ", export_format, 
+              ". Supported formats are: svg, png, txt. Using 'svg' as default.")
+      export_format <- "svg"
+    }
+    config$visualization_settings$export_format <- export_format
+  }
+  
+  if (!is.null(export_dir)) {
+    # Validate export directory
+    if (!dir.exists(export_dir)) {
+      warning("Export directory does not exist: ", export_dir, 
+              ". Creating directory...")
+      dir.create(export_dir, recursive = TRUE, showWarnings = FALSE)
+    }
+    
+    if (!dir.exists(export_dir)) {
+      warning("Failed to create export directory: ", export_dir, 
+              ". Using current working directory instead.")
+      export_dir <- getwd()
+    }
+    
+    config$visualization_settings$export_dir <- export_dir
   }
   
   # Save the updated configuration
@@ -788,6 +1905,19 @@ tldr_visualization_config <- function(enable = NULL, default_type = NULL, auto_i
   message("  Default type: ", config$visualization_settings$default_type)
   message("  Auto-install required packages: ", 
           ifelse(config$visualization_settings$auto_install, "Yes", "No"))
+  
+  if (!is.null(config$visualization_settings$auto_export)) {
+    message("  Auto-export visualizations: ", 
+            ifelse(config$visualization_settings$auto_export, "Yes", "No"))
+  }
+  
+  if (!is.null(config$visualization_settings$export_format)) {
+    message("  Default export format: ", config$visualization_settings$export_format)
+  }
+  
+  if (!is.null(config$visualization_settings$export_dir)) {
+    message("  Export directory: ", config$visualization_settings$export_dir)
+  }
   
   invisible(config)
 }

@@ -37,13 +37,20 @@ print_tldr_response <- function(response, func_name, verbose, examples,
   cat(formatted_content)
   
   # Display visualization if available
-  if (!is.null(visualization) && inherits(visualization, "VisualizationHandler")) {
-    if (!is.null(visualization$visualization_data$diagram)) {
-      cat("\n")
-      cli::cli_h2("Visualization")
-      
-      # Print the visualization
+  if (!is.null(visualization)) {
+    cat("\n")
+    cli::cli_h2("Visualization")
+    
+    # Print the visualization
+    if (inherits(visualization, "VisualizationHandler") && !is.null(visualization$visualization_data$diagram)) {
       visualization$print()
+    } else if (is.character(visualization)) {
+      # Directly print ASCII visualizations
+      cat(visualization)
+      cat("\n")
+    } else {
+      # For any other type of visualization
+      print(visualization)
     }
   }
   
