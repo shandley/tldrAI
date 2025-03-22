@@ -65,6 +65,7 @@ tldr_test_connection("claude")
 - **Character Voices**: Add personality to responses with customizable character voices
 - **Multiple LLM Providers**: Support for both Claude and OpenAI APIs
 - **Provider Fallback**: Automatically switch to a fallback provider if the primary one fails
+- **Progress Bar**: Visual feedback while waiting for API responses
 - **Offline Mode**: Use cached responses when you're offline
 - **Cache Management**: Intelligent caching with TTL and selective clearing
 - **Customizable**: Configure verbosity, number of examples, and other preferences
@@ -98,7 +99,10 @@ tldr_config(
   # Usage settings
   verbose_default = FALSE,            # Default verbosity setting
   examples_default = 2,               # Default number of examples
-  character_voice = "wise_mentor"     # Default character voice
+  character_voice = "wise_mentor",    # Default character voice
+  
+  # UI settings
+  show_progress = TRUE                # Show progress bar during API calls
 )
 ```
 

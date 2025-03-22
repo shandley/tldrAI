@@ -14,6 +14,7 @@
 #' @param verbose_default Logical indicating the default verbosity
 #' @param examples_default Integer indicating the default number of examples
 #' @param character_voice Character string specifying the default character voice
+#' @param show_progress Logical indicating whether to show a progress bar during API calls
 #'
 #' @return Invisibly returns the updated configuration
 #' @export
@@ -26,12 +27,14 @@
 #' tldr_config(verbose_default = TRUE)
 #' tldr_config(offline_mode = TRUE)  # Use cached responses only
 #' tldr_config(character_voice = "enthusiastic_explorer")  # Set default character voice
+#' tldr_config(show_progress = TRUE)  # Show progress bar during API calls
 #' }
 tldr_config <- function(api_key = NULL, openai_api_key = NULL, 
                        provider = NULL, model = NULL, openai_model = NULL,
                        cache_enabled = NULL, cache_dir = NULL, cache_ttl = NULL,
                        offline_mode = NULL, enable_fallback = NULL, fallback_provider = NULL,
-                       verbose_default = NULL, examples_default = NULL, character_voice = NULL) {
+                       verbose_default = NULL, examples_default = NULL, character_voice = NULL,
+                       show_progress = NULL) {
   
   config <- get_config_all()
   
@@ -76,6 +79,12 @@ tldr_config <- function(api_key = NULL, openai_api_key = NULL,
       }
     }
     config$character_voice <- character_voice
+  }
+  if (!is.null(show_progress)) {
+    if (!is.logical(show_progress)) {
+      stop("show_progress must be a logical value (TRUE or FALSE)")
+    }
+    config$show_progress <- show_progress
   }
   
   # Save the updated config
@@ -135,7 +144,10 @@ get_config_all <- function() {
       examples_default = 2,
       
       # Character voice settings
-      character_voice = "none"  # Default to no character voice
+      character_voice = "none",  # Default to no character voice
+      
+      # UI settings
+      show_progress = TRUE  # Show progress bar by default
     )
     
     # Create directory if it doesn't exist

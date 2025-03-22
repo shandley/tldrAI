@@ -283,16 +283,91 @@ get_ai_response <- function(prompt, provider_override = NULL) {
     }
   })
   
+  # Check whether to show progress
+  show_progress <- get_config("show_progress", default = TRUE)
+  
+  # Initialize progress bar if needed
+  if (show_progress) {
+    provider_display <- ifelse(provider_name == "claude", "Claude's API", "OpenAI's API")
+    pb <- cli::cli_progress_bar(
+      format = "Querying {provider_display} {cli::pb_spin}",
+      format_done = "Received response from {provider_display} {cli::col_green('✓')}",
+      clear = FALSE,
+      type = "tasks"
+    )
+    # Cannot set a specific number of steps for an API call, so use indeterminate
+    cli::cli_progress_update(id = pb)
+  }
+  
   # Try to get response
   response <- tryCatch({
-    provider$get_response(prompt)
+    result <- provider$get_response(prompt)
+    
+    # Update progress bar on success
+    if (show_progress) {
+      cli::cli_progress_done(id = pb)
+    }
+    
+    result
   }, error = function(e) {
+    # Update progress bar to show error
+    if (show_progress) {
+      provider_display <- ifelse(provider_name == "claude", "Claude's API", "OpenAI's API")
+      cli::cli_progress_update(
+        id = pb,
+        format = "Error querying {provider_display} {cli::col_red('✗')}",
+        status = "failed"
+      )
+      cli::cli_progress_done(id = pb)
+    }
+    
     if (get_config("enable_fallback", default = FALSE) && 
         provider_name != get_config("fallback_provider", default = "claude")) {
       warning("Primary provider request failed: ", e$message, 
               ". Trying fallback provider: ", get_config("fallback_provider"))
+      
+      # Show fallback progress bar
+      if (show_progress) {
+        fallback_display <- ifelse(
+          get_config("fallback_provider") == "claude", 
+          "Claude's API (fallback)", 
+          "OpenAI's API (fallback)"
+        )
+        fallback_pb <- cli::cli_progress_bar(
+          format = "Trying fallback: {fallback_display} {cli::pb_spin}",
+          format_done = "Received response from {fallback_display} {cli::col_green('✓')}",
+          clear = FALSE,
+          type = "tasks"
+        )
+        cli::cli_progress_update(id = fallback_pb)
+      }
+      
       fallback_provider <- factory$create_provider(get_config("fallback_provider"), config)
-      fallback_provider$get_response(prompt)
+      fallback_result <- tryCatch({
+        result <- fallback_provider$get_response(prompt)
+        
+        # Update fallback progress bar on success
+        if (show_progress) {
+          cli::cli_progress_done(id = fallback_pb)
+        }
+        
+        result
+      }, error = function(fallback_err) {
+        # Update fallback progress bar on error
+        if (show_progress) {
+          cli::cli_progress_update(
+            id = fallback_pb,
+            format = "Error querying fallback {cli::col_red('✗')}",
+            status = "failed"
+          )
+          cli::cli_progress_done(id = fallback_pb)
+        }
+        
+        # Continue with the error handling below
+        stop(fallback_err)
+      })
+      
+      return(fallback_result)
     } else {
       # Use cached response if available
       cache_key <- digest::digest(list(prompt = prompt, provider = provider_name), algo = "sha256")
