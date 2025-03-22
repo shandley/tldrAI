@@ -2,6 +2,22 @@
 
 > AI-Powered Quick Reference for R Functions
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Installation](#installation)
+- [Features](#features)
+- [Usage](#usage)
+- [Configuration](#configuration)
+- [Offline Usage](#offline-usage)
+- [Performance Features](#performance-features)
+  - [Asynchronous API Calls](#asynchronous-api-calls)
+  - [Performance Tuning](#performance-tuning)
+- [Character Voices](#character-voices)
+  - [Available Character Voices](#available-character-voices)
+- [Support the Project](#support-the-project)
+- [License](#license)
+
 ## Overview
 
 `tldrAI` modernizes the concept of the tldr package with AI capabilities. It provides concise, practical help for R functions using LLMs while maintaining the brevity and example-focused philosophy of tldr.
@@ -12,6 +28,22 @@
 # Install from GitHub
 # devtools::install_github("username/tldrAI")
 ```
+
+## Features
+
+- **Concise Help**: Get straight-to-the-point explanations focused on practical usage
+- **Examples-First**: Prioritizes realistic code examples over verbose documentation
+- **Character Voices**: Add personality to responses with customizable character voices
+- **Multiple LLM Providers**: Support for both Claude and OpenAI APIs
+- **Provider Fallback**: Automatically switch to a fallback provider if the primary one fails
+- **Progress Bar**: Visual feedback while waiting for API responses
+- **Offline Mode**: Use cached responses when you're offline
+- **Cache Management**: Intelligent caching with TTL and selective clearing
+- **Customizable**: Configure verbosity, number of examples, and other preferences
+- **Package Functions**: Support for functions from any package with `package::function` syntax
+- **Asynchronous Requests**: Make non-blocking API calls to improve performance
+- **Intelligent Retries**: Exponential backoff and smart retry logic for reliability
+- **Performance Tuning**: Configurable timeouts and retry attempts
 
 ## Usage
 
@@ -62,22 +94,6 @@ tldr_test_connection("claude")
 tldr_open_repo()
 ```
 
-## Features
-
-- **Concise Help**: Get straight-to-the-point explanations focused on practical usage
-- **Examples-First**: Prioritizes realistic code examples over verbose documentation
-- **Character Voices**: Add personality to responses with customizable character voices
-- **Multiple LLM Providers**: Support for both Claude and OpenAI APIs
-- **Provider Fallback**: Automatically switch to a fallback provider if the primary one fails
-- **Progress Bar**: Visual feedback while waiting for API responses
-- **Offline Mode**: Use cached responses when you're offline
-- **Cache Management**: Intelligent caching with TTL and selective clearing
-- **Customizable**: Configure verbosity, number of examples, and other preferences
-- **Package Functions**: Support for functions from any package with `package::function` syntax
-- **Asynchronous Requests**: Make non-blocking API calls to improve performance
-- **Intelligent Retries**: Exponential backoff and smart retry logic for reliability
-- **Performance Tuning**: Configurable timeouts and retry attempts
-
 ## Configuration
 
 You can configure `tldrAI` using the `tldr_config()` function:
@@ -118,6 +134,21 @@ tldr_config(
 )
 ```
 
+## Offline Usage
+
+`tldrAI` can operate in offline mode, using only cached responses:
+
+```r
+# Enable offline mode
+tldr_offline(TRUE)
+
+# Now all tldr() calls will use cached responses only
+tldr("mean")
+
+# Disable offline mode when you're back online
+tldr_offline(FALSE)
+```
+
 ## Performance Features
 
 ### Asynchronous API Calls
@@ -154,21 +185,6 @@ tldr_config(timeout = 120)  # 2 minutes
 
 # Increase retry attempts for unreliable networks
 tldr_config(max_retries = 5)
-```
-
-## Offline Usage
-
-`tldrAI` can operate in offline mode, using only cached responses:
-
-```r
-# Enable offline mode
-tldr_offline(TRUE)
-
-# Now all tldr() calls will use cached responses only
-tldr("mean")
-
-# Disable offline mode when you're back online
-tldr_offline(FALSE)
 ```
 
 ## Character Voices
