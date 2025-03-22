@@ -8,6 +8,9 @@
 #' @param voice Character string specifying the character voice to use (e.g., "enthusiastic_explorer")
 #' @param async Logical indicating whether to make the API call asynchronously
 #' @param context Logical indicating whether to use contextual awareness
+#' @param visualize Logical indicating whether to include visualizations
+#' @param vis_type Character string specifying the visualization type ("diagram" or "flowchart")
+#' @param prompt_install Logical indicating whether to prompt for installation of required packages
 #'
 #' @return Prints formatted help to the console (invisibly returns the raw response)
 #' @export
@@ -21,13 +24,17 @@
 #' tldr("sd", voice = "cynical_detective")
 #' tldr("plot", async = TRUE)  # Make an asynchronous API call
 #' tldr("filter", context = TRUE)  # Use contextual awareness
+#' tldr("mean", visualize = TRUE)  # Include visualization
+#' tldr("if", vis_type = "flowchart")  # Show a flowchart visualization
+#' tldr("lm", visualize = TRUE, prompt_install = FALSE)  # Don't prompt for installation
 #' 
 #' # Load a package first to avoid function ambiguity
 #' library(ggplot2)
 #' tldr("ggplot")
 #' }
 tldr <- function(func_name, verbose = NULL, examples = NULL, refresh = FALSE, 
-                provider = NULL, voice = NULL, async = NULL, context = NULL) {
+                provider = NULL, voice = NULL, async = NULL, context = NULL,
+                visualize = NULL, vis_type = NULL, prompt_install = TRUE) {
   # Validate input
   if (!is.character(func_name) || length(func_name) != 1) {
     stop("func_name must be a single character string")
@@ -45,6 +52,27 @@ tldr <- function(func_name, verbose = NULL, examples = NULL, refresh = FALSE,
       context <- config$context_settings$enable_context_awareness
     } else {
       context <- FALSE  # Default to false if not configured
+    }
+  }
+  
+  # Handle visualization settings
+  if (is.null(visualize)) {
+    # Get default visualization setting from config
+    config <- get_config_all()
+    if (!is.null(config$visualization_settings) && !is.null(config$visualization_settings$enable_visualization)) {
+      visualize <- config$visualization_settings$enable_visualization
+    } else {
+      visualize <- FALSE  # Default to false if not configured
+    }
+  }
+  
+  if (is.null(vis_type)) {
+    # Get default visualization type from config
+    config <- get_config_all()
+    if (!is.null(config$visualization_settings) && !is.null(config$visualization_settings$default_type)) {
+      vis_type <- config$visualization_settings$default_type
+    } else {
+      vis_type <- "diagram"  # Default to diagram if not configured
     }
   }
   
@@ -95,7 +123,22 @@ tldr <- function(func_name, verbose = NULL, examples = NULL, refresh = FALSE,
         attr(response, "voice") <- voice
       }
       
-      print_tldr_response(response, func_name, verbose, examples, selected_provider, voice)
+      # Create visualization if requested
+      visualization <- NULL
+      if (visualize) {
+        if (get_config("debug_mode", default = FALSE)) {
+          message("DEBUG: Creating visualization of type: ", vis_type)
+        }
+        
+        # Get function metadata
+        metadata <- get_function_metadata(func_name, pkg)
+        
+        # Create the visualization
+        visualization <- create_visualization(func_name, metadata, vis_type)
+      }
+      
+      print_tldr_response(response, func_name, verbose, examples, 
+                         selected_provider, voice, visualization)
       return(invisible(response))
     } else if (get_config("offline_mode", default = FALSE)) {
       # In offline mode, use expired cache anyway
@@ -108,7 +151,22 @@ tldr <- function(func_name, verbose = NULL, examples = NULL, refresh = FALSE,
         attr(response, "voice") <- voice
       }
       
-      print_tldr_response(response, func_name, verbose, examples, selected_provider, voice)
+      # Create visualization if requested
+      visualization <- NULL
+      if (visualize) {
+        if (get_config("debug_mode", default = FALSE)) {
+          message("DEBUG: Creating visualization of type: ", vis_type)
+        }
+        
+        # Get function metadata
+        metadata <- get_function_metadata(func_name, pkg)
+        
+        # Create the visualization with prompt_install parameter
+        visualization <- create_visualization(func_name, metadata, vis_type, prompt_install = prompt_install)
+      }
+      
+      print_tldr_response(response, func_name, verbose, examples, 
+                         selected_provider, voice, visualization)
       return(invisible(response))
     }
     # Otherwise continue to get a fresh response
@@ -270,6 +328,9 @@ tldr <- function(func_name, verbose = NULL, examples = NULL, refresh = FALSE,
       provider = selected_provider,
       voice = voice,
       context = context,
+      visualize = visualize,
+      vis_type = vis_type,
+      prompt_install = prompt_install,
       timestamp = Sys.time()
     ), envir = .GlobalEnv)
     
@@ -290,8 +351,28 @@ tldr <- function(func_name, verbose = NULL, examples = NULL, refresh = FALSE,
     attr(response_obj, "voice") <- voice
   }
   
+  # Add context-aware flag if used
+  if (context) {
+    attr(response_obj, "context_aware") <- TRUE
+  }
+  
+  # Create visualization if requested
+  visualization <- NULL
+  if (visualize) {
+    if (get_config("debug_mode", default = FALSE)) {
+      message("DEBUG: Creating visualization of type: ", vis_type)
+    }
+    
+    # Get function metadata
+    metadata <- get_function_metadata(func_name, pkg)
+    
+    # Create the visualization with prompt_install parameter
+    visualization <- create_visualization(func_name, metadata, vis_type, prompt_install = prompt_install)
+  }
+  
   # Print formatted response
-  print_tldr_response(response_obj, func_name, verbose, examples, selected_provider, voice)
+  print_tldr_response(response_obj, func_name, verbose, examples, 
+                     selected_provider, voice, visualization)
   
   invisible(response_obj)
 }
@@ -355,10 +436,35 @@ tldr_check_async <- function(wait = TRUE, timeout = 30) {
       attr(response, "context_aware") <- TRUE
     }
     
+    # Create visualization if requested
+    visualization <- NULL
+    if (!is.null(async_req$visualize) && async_req$visualize) {
+      if (get_config("debug_mode", default = FALSE)) {
+        message("DEBUG: Creating visualization of type: ", async_req$vis_type)
+      }
+      
+      # Get function metadata for the function
+      func_parts <- strsplit(async_req$func_name, "::", fixed = TRUE)[[1]]
+      if (length(func_parts) > 1) {
+        pkg <- func_parts[1]
+        func_name <- func_parts[2]
+      } else {
+        pkg <- NULL
+        func_name <- async_req$func_name
+      }
+      
+      metadata <- get_function_metadata(func_name, pkg)
+      
+      # Create the visualization with prompt_install parameter
+      # For async calls, we need to store the prompt_install parameter in the async_req object
+      visualization <- create_visualization(func_name, metadata, async_req$vis_type, prompt_install = async_req$prompt_install %||% TRUE)
+    }
+    
     # Print formatted response
     print_tldr_response(response, async_req$func_name, 
                       async_req$verbose, async_req$examples, 
-                      async_req$provider, async_req$voice)
+                      async_req$provider, async_req$voice,
+                      visualization)
     
     # Clean up the async request
     rm("tldr_last_async_request", envir = .GlobalEnv)
