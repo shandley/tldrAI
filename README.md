@@ -27,10 +27,11 @@ tldr_config(openai_api_key = "your_openai_api_key", provider = "openai")
 tldr("mean")
 
 # Get more detailed help with more examples
-tldr("ggplot", verbose = TRUE, examples = 3)
+tldr("stats::sd", verbose = TRUE, examples = 3)
 
-# Switch providers for a specific query
-tldr("dplyr::filter", provider = "openai") 
+# Always use package::function notation for clarity with popular packages
+tldr("ggplot2::ggplot", examples = 3)
+tldr("dplyr::filter", provider = "openai")
 
 # Use a character voice for more personality
 tldr("mean", voice = "enthusiastic_explorer")

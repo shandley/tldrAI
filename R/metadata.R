@@ -51,8 +51,31 @@ get_function_metadata <- function(func_name, package = NULL) {
       if (length(exact_match) == 1) {
         func_name <- exact_match
       } else {
+        # Find the best match, prioritizing those from common packages
+        common_packages <- c("base", "stats", "utils", "graphics", "ggplot2", "dplyr", "tidyr", "stringr", "lubridate", "purrr")
+        for (pkg in common_packages) {
+          pkg_namespace <- tryCatch(asNamespace(pkg), error = function(e) NULL)
+          if (!is.null(pkg_namespace)) {
+            for (match in matches) {
+              if (exists(match, envir = pkg_namespace, inherits = FALSE)) {
+                func_name <- match
+                warning("Multiple functions named '", func_name, "' found. Using the one from '", pkg, "' package.\n",
+                        "For a specific package, use the package::function notation (e.g., '", pkg, "::", func_name, "')")
+                return(list(
+                  name = func_name,
+                  package = pkg,
+                  signature = get_function_signature(func_name, get(func_name, envir = pkg_namespace)),
+                  description = get_function_description(func_name, pkg)
+                ))
+              }
+            }
+          }
+        }
+        
+        # If no match in common packages, use the first one
         func_name <- matches[1]
-        warning("Multiple functions found. Using '", func_name, "'")
+        warning("Multiple functions named '", func_name, "' found. Using '", func_name, "'.\n",
+                "For more precise results, use the package::function notation (e.g., 'packagename::", func_name, "')")
       }
     } else {
       func_name <- matches[1]
