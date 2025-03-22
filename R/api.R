@@ -382,10 +382,27 @@ get_ai_response <- function(prompt, provider_override = NULL, async = FALSE) {
       now <- Sys.time()
       
       if (difftime(now, file_time, units = "days") <= cache_ttl) {
-        if (show_progress) {
-          message("Using cached response ✓")
+        # Read and validate cached response
+        cached_response <- readRDS(cache_path)
+        
+        # Ensure the cached response doesn't contain template placeholders
+        if (!is.null(cached_response) && 
+            !grepl("\\{\\{FUNCTION_NAME\\}\\}", cached_response, fixed = TRUE) && 
+            !grepl("\\{\\{FUNCTION_DESCRIPTION\\}\\}", cached_response, fixed = TRUE) && 
+            !grepl("\\{\\{FUNCTION_ARGS\\}\\}", cached_response, fixed = TRUE) &&
+            !grepl("\\{\\{EXAMPLES\\}\\}", cached_response, fixed = TRUE) &&
+            nchar(cached_response) > 50) {
+          
+          if (show_progress) {
+            message("Using cached response ✓")
+          }
+          return(cached_response)
+        } else {
+          if (get_config("debug_mode", default = FALSE)) {
+            message("DEBUG: Found invalid cached response, ignoring")
+          }
+          # Continue to make an API request
         }
-        return(readRDS(cache_path))
       }
     }
   }
@@ -403,17 +420,30 @@ get_ai_response <- function(prompt, provider_override = NULL, async = FALSE) {
       
       # Cache the successful response
       if (get_config("cache_enabled", default = TRUE)) {
-        # We use digest to create a unique hash based on the prompt and provider
-        # This ensures different functions with similar names don't collide
-        cache_key <- digest::digest(list(prompt = prompt, provider = provider$provider_name), algo = "sha256")
-        cache_path <- file.path(get_config("cache_dir"), paste0(cache_key, ".rds"))
-        
-        # Ensure cache directory exists
-        if (!dir.exists(get_config("cache_dir"))) {
-          dir.create(get_config("cache_dir"), recursive = TRUE)
+        # Validate response - don't cache template placeholders or empty responses
+        if (!is.null(result) && 
+            !grepl("\\{\\{FUNCTION_NAME\\}\\}", result, fixed = TRUE) && 
+            !grepl("\\{\\{FUNCTION_DESCRIPTION\\}\\}", result, fixed = TRUE) && 
+            !grepl("\\{\\{FUNCTION_ARGS\\}\\}", result, fixed = TRUE) &&
+            !grepl("\\{\\{EXAMPLES\\}\\}", result, fixed = TRUE) &&
+            nchar(result) > 50) {
+          
+          # We use digest to create a unique hash based on the prompt and provider
+          # This ensures different functions with similar names don't collide
+          cache_key <- digest::digest(list(prompt = prompt, provider = provider$provider_name), algo = "sha256")
+          cache_path <- file.path(get_config("cache_dir"), paste0(cache_key, ".rds"))
+          
+          # Ensure cache directory exists
+          if (!dir.exists(get_config("cache_dir"))) {
+            dir.create(get_config("cache_dir"), recursive = TRUE)
+          }
+          
+          saveRDS(result, cache_path)
+        } else {
+          if (get_config("debug_mode", default = FALSE)) {
+            message("DEBUG: Not caching invalid or template response")
+          }
         }
-        
-        saveRDS(result, cache_path)
       }
       
       result
