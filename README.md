@@ -32,6 +32,16 @@ tldr("ggplot", verbose = TRUE, examples = 3)
 # Switch providers for a specific query
 tldr("dplyr::filter", provider = "openai") 
 
+# Use a character voice for more personality
+tldr("mean", voice = "enthusiastic_explorer")
+tldr("sd", voice = "cynical_detective")
+
+# See available character voices
+tldr_list_voices()
+
+# Test how a specific voice sounds
+tldr_test_voice("eccentric_scientist")
+
 # Enable offline mode
 tldr_offline(TRUE)
 
@@ -52,6 +62,7 @@ tldr_test_connection("claude")
 
 - **Concise Help**: Get straight-to-the-point explanations focused on practical usage
 - **Examples-First**: Prioritizes realistic code examples over verbose documentation
+- **Character Voices**: Add personality to responses with customizable character voices
 - **Multiple LLM Providers**: Support for both Claude and OpenAI APIs
 - **Provider Fallback**: Automatically switch to a fallback provider if the primary one fails
 - **Offline Mode**: Use cached responses when you're offline
@@ -86,7 +97,8 @@ tldr_config(
   
   # Usage settings
   verbose_default = FALSE,            # Default verbosity setting
-  examples_default = 2                # Default number of examples
+  examples_default = 2,               # Default number of examples
+  character_voice = "wise_mentor"     # Default character voice
 )
 ```
 
@@ -104,6 +116,29 @@ tldr("mean")
 # Disable offline mode when you're back online
 tldr_offline(FALSE)
 ```
+
+## Character Voices
+
+`tldrAI` includes several character voices that add personality to the function help:
+
+```r
+# List all available voices
+tldr_list_voices()
+
+# Try different voices
+tldr("mean", voice = "enthusiastic_explorer")  # Excited and energetic
+tldr("sd", voice = "cynical_detective")        # Skeptical and direct
+tldr("median", voice = "wise_mentor")          # Thoughtful and patient
+tldr("ggplot", voice = "eccentric_scientist")  # Quirky and unpredictable
+
+# Set a default voice for all responses
+tldr_config(character_voice = "wise_mentor")
+
+# Test a voice with a standard function
+tldr_test_voice("eccentric_scientist")
+```
+
+Character voices transform the standard help text with personality traits while preserving all the important information. They modify section headings, add character-specific phrases, and adjust the tone of the response.
 
 ## License
 

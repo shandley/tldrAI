@@ -13,6 +13,7 @@
 #' @param fallback_provider Character string specifying the fallback provider
 #' @param verbose_default Logical indicating the default verbosity
 #' @param examples_default Integer indicating the default number of examples
+#' @param character_voice Character string specifying the default character voice
 #'
 #' @return Invisibly returns the updated configuration
 #' @export
@@ -24,12 +25,13 @@
 #' tldr_config(enable_fallback = TRUE, fallback_provider = "openai")
 #' tldr_config(verbose_default = TRUE)
 #' tldr_config(offline_mode = TRUE)  # Use cached responses only
+#' tldr_config(character_voice = "enthusiastic_explorer")  # Set default character voice
 #' }
 tldr_config <- function(api_key = NULL, openai_api_key = NULL, 
                        provider = NULL, model = NULL, openai_model = NULL,
                        cache_enabled = NULL, cache_dir = NULL, cache_ttl = NULL,
                        offline_mode = NULL, enable_fallback = NULL, fallback_provider = NULL,
-                       verbose_default = NULL, examples_default = NULL) {
+                       verbose_default = NULL, examples_default = NULL, character_voice = NULL) {
   
   config <- get_config_all()
   
@@ -65,6 +67,16 @@ tldr_config <- function(api_key = NULL, openai_api_key = NULL,
   }
   if (!is.null(verbose_default)) config$verbose_default <- verbose_default
   if (!is.null(examples_default)) config$examples_default <- examples_default
+  if (!is.null(character_voice)) {
+    # Validate character voice if factory is available
+    if (exists("CharacterVoiceFactory")) {
+      factory <- CharacterVoiceFactory$new()
+      if (!character_voice %in% names(factory$voices)) {
+        warning("Character voice '", character_voice, "' not found. Use tldr_list_voices() to see available voices.")
+      }
+    }
+    config$character_voice <- character_voice
+  }
   
   # Save the updated config
   save_config(config)
@@ -120,7 +132,10 @@ get_config_all <- function() {
       
       # Usage settings
       verbose_default = FALSE,
-      examples_default = 2
+      examples_default = 2,
+      
+      # Character voice settings
+      character_voice = "none"  # Default to no character voice
     )
     
     # Create directory if it doesn't exist
