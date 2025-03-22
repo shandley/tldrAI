@@ -16,6 +16,9 @@
 #' @param character_voice Character string specifying the default character voice
 #' @param show_progress Logical indicating whether to show a progress bar during API calls
 #' @param debug_mode Logical indicating whether to show debug information
+#' @param async_mode Logical indicating whether to use asynchronous API calls
+#' @param timeout Numeric value specifying the API request timeout in seconds
+#' @param max_retries Numeric value specifying the maximum number of retries for API calls
 #'
 #' @return Invisibly returns the updated configuration
 #' @export
@@ -29,13 +32,17 @@
 #' tldr_config(offline_mode = TRUE)  # Use cached responses only
 #' tldr_config(character_voice = "enthusiastic_explorer")  # Set default character voice
 #' tldr_config(show_progress = TRUE)  # Show progress bar during API calls
+#' tldr_config(async_mode = TRUE)  # Enable asynchronous API calls
+#' tldr_config(timeout = 30)  # Set API request timeout to 30 seconds
+#' tldr_config(max_retries = 5)  # Set maximum number of retries to 5
 #' }
 tldr_config <- function(api_key = NULL, openai_api_key = NULL, 
                        provider = NULL, model = NULL, openai_model = NULL,
                        cache_enabled = NULL, cache_dir = NULL, cache_ttl = NULL,
                        offline_mode = NULL, enable_fallback = NULL, fallback_provider = NULL,
                        verbose_default = NULL, examples_default = NULL, character_voice = NULL,
-                       show_progress = NULL, debug_mode = NULL) {
+                       show_progress = NULL, debug_mode = NULL, async_mode = NULL,
+                       timeout = NULL, max_retries = NULL) {
   
   config <- get_config_all()
   
@@ -122,6 +129,35 @@ tldr_config <- function(api_key = NULL, openai_api_key = NULL,
     config$debug_mode <- debug_mode
   }
   
+  if (!is.null(async_mode)) {
+    if (!is.logical(async_mode)) {
+      stop("async_mode must be a logical value (TRUE or FALSE)")
+    }
+    if (async_mode && !requireNamespace("future", quietly = TRUE)) {
+      warning("The 'future' package is not installed. Async mode requires the 'future' package. Install with: install.packages(\"future\")")
+      config$async_mode <- FALSE
+    } else if (async_mode && !requireNamespace("promises", quietly = TRUE)) {
+      warning("The 'promises' package is not installed. Async mode requires the 'promises' package. Install with: install.packages(\"promises\")")
+      config$async_mode <- FALSE
+    } else {
+      config$async_mode <- async_mode
+    }
+  }
+  
+  if (!is.null(timeout)) {
+    if (!is.numeric(timeout) || timeout <= 0) {
+      stop("timeout must be a positive number")
+    }
+    config$timeout <- timeout
+  }
+  
+  if (!is.null(max_retries)) {
+    if (!is.numeric(max_retries) || max_retries < 0 || max_retries != as.integer(max_retries)) {
+      stop("max_retries must be a non-negative integer")
+    }
+    config$max_retries <- as.integer(max_retries)
+  }
+  
   # Save the updated config
   save_config(config)
   
@@ -173,6 +209,7 @@ get_config_all <- function() {
       cache_dir = file.path(rappdirs::user_cache_dir("tldrAI"), "cache"),
       cache_ttl = 30,  # Cache TTL in days
       offline_mode = FALSE,
+      refresh_mode = FALSE,  # Whether to ignore cached content
       
       # Usage settings
       verbose_default = FALSE,
@@ -183,7 +220,13 @@ get_config_all <- function() {
       
       # UI settings
       show_progress = TRUE,  # Show progress bar by default
-      debug_mode = FALSE  # Debug mode
+      debug_mode = FALSE,  # Debug mode
+      
+      # Performance settings
+      async_mode = FALSE,  # Asynchronous API calls
+      timeout = 60,  # API request timeout in seconds
+      max_retries = 3,  # Maximum number of retries for API calls
+      batch_size = 1  # Number of concurrent requests
     )
     
     # Create directory if it doesn't exist

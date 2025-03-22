@@ -47,6 +47,9 @@ ClaudeProvider <- R6::R6Class("ClaudeProvider",
     #' @field max_retries Maximum number of retries
     max_retries = 3,
     
+    #' @field timeout API request timeout in seconds
+    timeout = 60,
+    
     #' @description Initialize a new Claude provider
     #' @param config Configuration list
     initialize = function(config) {
@@ -58,9 +61,18 @@ ClaudeProvider <- R6::R6Class("ClaudeProvider",
         "claude-2.1"
       )
       
-      # Set API key and model
+      # Set API key, model, and performance settings
       self$api_key <- config$api_key
       self$model <- config$model
+      
+      # Set custom timeout and max_retries if provided
+      if (!is.null(config$timeout) && is.numeric(config$timeout) && config$timeout > 0) {
+        self$timeout <- config$timeout
+      }
+      
+      if (!is.null(config$max_retries) && is.numeric(config$max_retries) && config$max_retries >= 0) {
+        self$max_retries <- config$max_retries
+      }
       
       if (is.null(self$api_key) || self$api_key == "") {
         stop(
@@ -110,7 +122,12 @@ ClaudeProvider <- R6::R6Class("ClaudeProvider",
             )
           )
         )) |>
-        httr2::req_retry(max_tries = self$max_retries) |>
+        httr2::req_retry(
+          max_tries = self$max_retries,
+          backoff = ~ 2 ^ .x,  # Exponential backoff (2, 4, 8 seconds...)
+          is_transient = function(resp) httr2::resp_status(resp) %in% c(429, 500, 502, 503, 504)
+        ) |>
+        httr2::req_timeout(seconds = self$timeout) |>
         httr2::req_error(is_error = function(resp) FALSE) |>
         httr2::req_perform()
       
@@ -161,6 +178,9 @@ OpenAIProvider <- R6::R6Class("OpenAIProvider",
     #' @field max_retries Maximum number of retries
     max_retries = 3,
     
+    #' @field timeout API request timeout in seconds
+    timeout = 60,
+    
     #' @description Initialize a new OpenAI provider
     #' @param config Configuration list
     initialize = function(config) {
@@ -172,9 +192,18 @@ OpenAIProvider <- R6::R6Class("OpenAIProvider",
         "gpt-3.5-turbo"
       )
       
-      # Set API key and model
+      # Set API key, model, and performance settings
       self$api_key <- config$openai_api_key
       self$model <- config$openai_model
+      
+      # Set custom timeout and max_retries if provided
+      if (!is.null(config$timeout) && is.numeric(config$timeout) && config$timeout > 0) {
+        self$timeout <- config$timeout
+      }
+      
+      if (!is.null(config$max_retries) && is.numeric(config$max_retries) && config$max_retries >= 0) {
+        self$max_retries <- config$max_retries
+      }
       
       if (is.null(self$api_key) || self$api_key == "") {
         stop(
@@ -223,7 +252,12 @@ OpenAIProvider <- R6::R6Class("OpenAIProvider",
           max_tokens = 1024,
           temperature = 0.3
         )) |>
-        httr2::req_retry(max_tries = self$max_retries) |>
+        httr2::req_retry(
+          max_tries = self$max_retries,
+          backoff = ~ 2 ^ .x,  # Exponential backoff (2, 4, 8 seconds...)
+          is_transient = function(resp) httr2::resp_status(resp) %in% c(429, 500, 502, 503, 504)
+        ) |>
+        httr2::req_timeout(seconds = self$timeout) |>
         httr2::req_error(is_error = function(resp) FALSE) |>
         httr2::req_perform()
       
@@ -300,10 +334,11 @@ LLMProviderFactory <- R6::R6Class("LLMProviderFactory",
 #'
 #' @param prompt The prompt text to send to the API
 #' @param provider_override Optional override for the provider to use
+#' @param async Logical indicating whether to make the request asynchronously
 #'
 #' @return The API response text
 #' @keywords internal
-get_ai_response <- function(prompt, provider_override = NULL) {
+get_ai_response <- function(prompt, provider_override = NULL, async = FALSE) {
   config <- get_config_all()
   
   # Determine which provider to use
@@ -334,89 +369,120 @@ get_ai_response <- function(prompt, provider_override = NULL) {
     message(paste0("Querying ", provider_display, "..."))
   }
   
-  # Try to get response
-  response <- tryCatch({
-    result <- provider$get_response(prompt)
-    
-    # Show completion message
-    if (show_progress) {
-      message(paste0("Response received from ", provider_display, " ✓"))
-    }
-    
-    result
-  }, error = function(e) {
-    # Show error message
-    if (show_progress) {
-      provider_display <- ifelse(provider_name == "claude", "Claude's API", "OpenAI's API")
-      message(paste0("Error querying ", provider_display, " ✗"))
-    }
-    
-    if (get_config("enable_fallback", default = FALSE) && 
-        provider_name != get_config("fallback_provider", default = "claude")) {
-      warning("Primary provider request failed: ", e$message, 
-              ". Trying fallback provider: ", get_config("fallback_provider"))
-      
-      # Show fallback message
-      if (show_progress) {
-        fallback_display <- ifelse(
-          get_config("fallback_provider") == "claude", 
-          "Claude's API (fallback)", 
-          "OpenAI's API (fallback)"
-        )
-        message(paste0("Trying fallback: ", fallback_display, "..."))
-      }
-      
-      fallback_provider <- factory$create_provider(get_config("fallback_provider"), config)
-      fallback_result <- tryCatch({
-        result <- fallback_provider$get_response(prompt)
-        
-        # Show fallback success message
-        if (show_progress) {
-          message(paste0("Response received from ", fallback_display, " ✓"))
-        }
-        
-        result
-      }, error = function(fallback_err) {
-        # Show fallback error message
-        if (show_progress) {
-          message(paste0("Error querying ", fallback_display, " ✗"))
-        }
-        
-        # Continue with the error handling below
-        stop(fallback_err)
-      })
-      
-      return(fallback_result)
-    } else {
-      # Use cached response if available
-      cache_key <- digest::digest(list(prompt = prompt, provider = provider_name), algo = "sha256")
-      cache_path <- file.path(get_config("cache_dir"), paste0(cache_key, ".rds"))
-      
-      if (file.exists(cache_path) && get_config("offline_mode", default = FALSE)) {
-        message("Using cached response in offline mode")
-        return(readRDS(cache_path))
-      } else {
-        stop(e)
-      }
-    }
-  })
-  
-  # Cache the successful response
+  # Check if cached response exists first before making API calls
   if (get_config("cache_enabled", default = TRUE)) {
-    # We use digest to create a unique hash based on the prompt and provider
-    # This ensures different functions with similar names don't collide
-    cache_key <- digest::digest(list(prompt = prompt, provider = provider$provider_name), algo = "sha256")
+    cache_key <- digest::digest(list(prompt = prompt, provider = provider_name), algo = "sha256")
     cache_path <- file.path(get_config("cache_dir"), paste0(cache_key, ".rds"))
     
-    # Ensure cache directory exists
-    if (!dir.exists(get_config("cache_dir"))) {
-      dir.create(get_config("cache_dir"), recursive = TRUE)
+    # Use cached response if available and not in refresh mode
+    if (file.exists(cache_path) && !get_config("refresh_mode", default = FALSE)) {
+      # Check if cache is expired
+      cache_ttl <- get_config("cache_ttl", default = 30)
+      file_time <- file.info(cache_path)$mtime
+      now <- Sys.time()
+      
+      if (difftime(now, file_time, units = "days") <= cache_ttl) {
+        if (show_progress) {
+          message("Using cached response ✓")
+        }
+        return(readRDS(cache_path))
+      }
     }
-    
-    saveRDS(response, cache_path)
   }
   
-  response
+  # Function to handle the API request
+  make_request <- function() {
+    tryCatch({
+      result <- provider$get_response(prompt)
+      
+      # Show completion message
+      if (show_progress) {
+        provider_display <- ifelse(provider_name == "claude", "Claude's API", "OpenAI's API")
+        message(paste0("Response received from ", provider_display, " ✓"))
+      }
+      
+      # Cache the successful response
+      if (get_config("cache_enabled", default = TRUE)) {
+        # We use digest to create a unique hash based on the prompt and provider
+        # This ensures different functions with similar names don't collide
+        cache_key <- digest::digest(list(prompt = prompt, provider = provider$provider_name), algo = "sha256")
+        cache_path <- file.path(get_config("cache_dir"), paste0(cache_key, ".rds"))
+        
+        # Ensure cache directory exists
+        if (!dir.exists(get_config("cache_dir"))) {
+          dir.create(get_config("cache_dir"), recursive = TRUE)
+        }
+        
+        saveRDS(result, cache_path)
+      }
+      
+      result
+    }, error = function(e) {
+      # Show error message
+      if (show_progress) {
+        provider_display <- ifelse(provider_name == "claude", "Claude's API", "OpenAI's API")
+        message(paste0("Error querying ", provider_display, " ✗"))
+      }
+      
+      if (get_config("enable_fallback", default = FALSE) && 
+          provider_name != get_config("fallback_provider", default = "claude")) {
+        warning("Primary provider request failed: ", e$message, 
+                ". Trying fallback provider: ", get_config("fallback_provider"))
+        
+        # Show fallback message
+        if (show_progress) {
+          fallback_display <- ifelse(
+            get_config("fallback_provider") == "claude", 
+            "Claude's API (fallback)", 
+            "OpenAI's API (fallback)"
+          )
+          message(paste0("Trying fallback: ", fallback_display, "..."))
+        }
+        
+        fallback_provider <- factory$create_provider(get_config("fallback_provider"), config)
+        fallback_result <- tryCatch({
+          result <- fallback_provider$get_response(prompt)
+          
+          # Show fallback success message
+          if (show_progress) {
+            message(paste0("Response received from ", fallback_display, " ✓"))
+          }
+          
+          result
+        }, error = function(fallback_err) {
+          # Show fallback error message
+          if (show_progress) {
+            message(paste0("Error querying ", fallback_display, " ✗"))
+          }
+          
+          # Continue with the error handling below
+          stop(fallback_err)
+        })
+        
+        return(fallback_result)
+      } else {
+        # Use cached response if available
+        cache_key <- digest::digest(list(prompt = prompt, provider = provider_name), algo = "sha256")
+        cache_path <- file.path(get_config("cache_dir"), paste0(cache_key, ".rds"))
+        
+        if (file.exists(cache_path) && get_config("offline_mode", default = FALSE)) {
+          message("Using cached response in offline mode")
+          return(readRDS(cache_path))
+        } else {
+          stop(e)
+        }
+      }
+    })
+  }
+  
+  # Execute the request either synchronously or asynchronously
+  if (async && requireNamespace("future", quietly = TRUE) && 
+      requireNamespace("promises", quietly = TRUE)) {
+    future_result <- future::future(make_request())
+    return(future_result)
+  } else {
+    return(make_request())
+  }
 }
 
 #' Null-coalescing operator

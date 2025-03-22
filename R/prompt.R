@@ -8,52 +8,35 @@
 #' @return Character string containing the prompt
 #' @keywords internal
 build_prompt <- function(func_name, func_metadata, verbose, examples) {
-  # Get the raw template first
-  template <- "
-I need help documenting the R function 'mean' from the base package.
-
-Please write a concise, practical help summary for the 'mean' function that explains:
-
-1. Its purpose (calculating the arithmetic mean of values)
-2. Basic usage (mean(x))
-3. Key arguments (what x can be, and what the ... is for)
-4. 2-3 practical examples of using the function
-5. Common pitfalls or gotchas
-6. Related functions (like median, sum, etc.)
-7. When to use mean vs alternatives
-
-Format the response as a markdown document with clear section headers.
-"
+  # Get the template
+  template <- get_prompt_template()
   
-  # Replace the function name and package with the actual values
-  if (func_name != "mean") {
-    template <- gsub("mean", func_name, template, fixed = TRUE)
-  }
-  if (func_metadata$package != "base") {
-    template <- gsub("base", func_metadata$package, template, fixed = TRUE)
-  }
+  # Replace placeholders with actual values
+  template <- gsub("\\{\\{FUNCTION_NAME\\}\\}", func_name, template, fixed = TRUE)
+  template <- gsub("\\{\\{PACKAGE_NAME\\}\\}", func_metadata$package, template, fixed = TRUE)
+  template <- gsub("\\{\\{FUNCTION_SIGNATURE\\}\\}", func_metadata$signature, template, fixed = TRUE)
+  template <- gsub("\\{\\{FUNCTION_DESCRIPTION\\}\\}", func_metadata$description, template, fixed = TRUE)
   
-  # Add specific signature information
-  if (!is.null(func_metadata$signature)) {
-    signature_info <- paste0("\nThe function signature is: ", func_metadata$signature)
-    template <- paste0(template, signature_info)
-  }
-  
-  # Add arguments info
-  if (!is.null(func_metadata$args)) {
+  # Handle argument list
+  args_str <- "None specified"
+  if (!is.null(func_metadata$args) && length(func_metadata$args) > 0) {
     args_str <- paste(func_metadata$args, collapse = ", ")
-    args_info <- paste0("\nThe function arguments are: ", args_str)
-    template <- paste0(template, args_info)
   }
+  template <- gsub("\\{\\{FUNCTION_ARGS\\}\\}", args_str, template, fixed = TRUE)
   
-  # Add examples request
-  examples_info <- paste0("\nPlease include ", as.character(examples), " practical examples.")
-  template <- paste0(template, examples_info)
-  
-  # Add verbose flag
-  if (verbose) {
-    template <- paste0(template, "\nPlease include detailed information about common pitfalls, related functions, and when to use this function vs alternatives.")
+  # Handle function body/implementation (if available)
+  body_str <- "Not available"
+  if (!is.null(func_metadata$body)) {
+    body_str <- func_metadata$body
   }
+  template <- gsub("\\{\\{FUNCTION_BODY\\}\\}", body_str, template, fixed = TRUE)
+  
+  # Handle examples count
+  template <- gsub("\\{\\{EXAMPLES_REQUESTED\\}\\}", as.character(examples), template, fixed = TRUE)
+  
+  # Handle verbose flag
+  verbose_str <- ifelse(verbose, "YES", "NO")
+  template <- gsub("\\{\\{VERBOSE\\}\\}", verbose_str, template, fixed = TRUE)
   
   template
 }

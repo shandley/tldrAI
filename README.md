@@ -74,6 +74,9 @@ tldr_open_repo()
 - **Cache Management**: Intelligent caching with TTL and selective clearing
 - **Customizable**: Configure verbosity, number of examples, and other preferences
 - **Package Functions**: Support for functions from any package with `package::function` syntax
+- **Asynchronous Requests**: Make non-blocking API calls to improve performance
+- **Intelligent Retries**: Exponential backoff and smart retry logic for reliability
+- **Performance Tuning**: Configurable timeouts and retry attempts
 
 ## Configuration
 
@@ -106,8 +109,51 @@ tldr_config(
   character_voice = "wise_mentor",    # Default character voice
   
   # UI settings
-  show_progress = TRUE                # Show progress bar during API calls
+  show_progress = TRUE,               # Show progress bar during API calls
+  
+  # Performance settings
+  async_mode = FALSE,                 # Enable asynchronous API calls
+  timeout = 60,                       # API request timeout in seconds
+  max_retries = 3                     # Maximum number of retry attempts
 )
+```
+
+## Performance Features
+
+### Asynchronous API Calls
+
+`tldrAI` supports non-blocking asynchronous API calls to improve performance:
+
+```r
+# Make an asynchronous request
+tldr("mean", async = TRUE)
+
+# Continue working on other tasks...
+# ...
+
+# Check and retrieve the result when ready
+result <- tldr_check_async()
+
+# Check without waiting (returns NULL if not ready)
+tldr_check_async(wait = FALSE)
+
+# Wait with a custom timeout (in seconds)
+tldr_check_async(timeout = 60)
+
+# Enable async mode by default
+tldr_config(async_mode = TRUE)
+```
+
+### Performance Tuning
+
+You can optimize API call performance with these settings:
+
+```r
+# Adjust timeout for slow connections
+tldr_config(timeout = 120)  # 2 minutes
+
+# Increase retry attempts for unreliable networks
+tldr_config(max_retries = 5)
 ```
 
 ## Offline Usage
