@@ -30,6 +30,14 @@ CharacterVoice <- R6::R6Class("CharacterVoice",
     transform = function(response) {
       # Base class does no transformation
       response
+    },
+    
+    #' @description Transform just the purpose content
+    #' @param purpose_lines Character vector with purpose content lines
+    #' @return The transformed purpose lines
+    transform_purpose = function(purpose_lines) {
+      # Base class does no transformation
+      purpose_lines
     }
   )
 )
@@ -83,6 +91,45 @@ EnthusiasticExplorerVoice <- R6::R6Class("EnthusiasticExplorerVoice",
       }
       
       response
+    },
+    
+    #' @description Transform just the purpose content
+    #' @param purpose_lines Character vector with purpose content lines
+    #' @return The transformed purpose lines
+    transform_purpose = function(purpose_lines) {
+      if (length(purpose_lines) == 0) return(purpose_lines)
+      
+      # Apply enthusiasm to each line
+      transformed_lines <- character(length(purpose_lines))
+      
+      for (i in seq_along(purpose_lines)) {
+        line <- purpose_lines[i]
+        
+        # Add exclamation marks instead of periods
+        line <- gsub("\\.", "!", line)
+        
+        # Add enthusiastic adverbs
+        enthusiastic_adverbs <- c(
+          "amazingly", "incredibly", "excitingly", "wonderfully", 
+          "fantastically", "spectacularly", "brilliantly"
+        )
+        
+        # Add an adverb to the line
+        if (i == 1 && nchar(trimws(line)) > 0) {
+          adverb <- sample(enthusiastic_adverbs, 1)
+          line <- paste0(adverb, " ", line)
+          line <- toupper(substr(line, 1, 1)) %+% substr(line, 2, nchar(line))
+        }
+        
+        # Add excitement
+        if (runif(1) > 0.5 && nchar(trimws(line)) > 0) {
+          line <- paste0(line, " WOW!")
+        }
+        
+        transformed_lines[i] <- line
+      }
+      
+      transformed_lines
     }
   )
 )
@@ -135,6 +182,50 @@ CynicalDetectiveVoice <- R6::R6Class("CynicalDetectiveVoice",
       }
       
       response
+    },
+    
+    #' @description Transform just the purpose content
+    #' @param purpose_lines Character vector with purpose content lines
+    #' @return The transformed purpose lines
+    transform_purpose = function(purpose_lines) {
+      if (length(purpose_lines) == 0) return(purpose_lines)
+      
+      # Apply cynicism to each line
+      transformed_lines <- character(length(purpose_lines))
+      
+      for (i in seq_along(purpose_lines)) {
+        line <- purpose_lines[i]
+        
+        # Add cynical intros
+        cynical_intros <- c(
+          "Listen, it just ", "Let's be honest, it simply ", 
+          "Cut to the chase, it ", "No frills, it "
+        )
+        
+        # Add an intro to the first line
+        if (i == 1 && nchar(trimws(line)) > 0) {
+          intro <- sample(cynical_intros, 1)
+          line <- paste0(intro, tolower(line))
+        }
+        
+        # Add cynical closers
+        if (i == length(purpose_lines) && nchar(trimws(line)) > 0) {
+          cynical_closers <- c(
+            ". That's all there is to it.", 
+            ". Nothing complicated about that.", 
+            ". Don't overthink it."
+          )
+          closer <- sample(cynical_closers, 1)
+          
+          # Replace period with the cynical closer
+          line <- gsub("\\.$", "", line)
+          line <- paste0(line, closer)
+        }
+        
+        transformed_lines[i] <- line
+      }
+      
+      transformed_lines
     }
   )
 )
@@ -187,6 +278,72 @@ WiseMentorVoice <- R6::R6Class("WiseMentorVoice",
       }
       
       response
+    },
+    
+    #' @description Transform just the purpose content
+    #' @param purpose_lines Character vector with purpose content lines
+    #' @return The transformed purpose lines
+    transform_purpose = function(purpose_lines) {
+      if (length(purpose_lines) == 0) return(purpose_lines)
+      
+      # Apply wisdom to each line
+      transformed_lines <- character(length(purpose_lines))
+      
+      for (i in seq_along(purpose_lines)) {
+        line <- purpose_lines[i]
+        
+        # Add wise intros
+        wise_intros <- c(
+          "In essence, ", "At its core, ", 
+          "The true purpose is to ", "As the wise programmer knows, it "
+        )
+        
+        # Add an intro to the first line
+        if (i == 1 && nchar(trimws(line)) > 0) {
+          intro <- sample(wise_intros, 1)
+          
+          # If the intro ends with "to ", adjust the line accordingly
+          if (grepl(" to $", intro)) {
+            # Convert first word to base form if possible
+            words <- strsplit(line, " ")[[1]]
+            if (length(words) > 0) {
+              # Simple heuristic to convert to infinitive
+              # This is a simplistic approach and won't work for all verbs
+              first_word <- tolower(words[1])
+              if (substr(first_word, nchar(first_word) - 1, nchar(first_word)) == "es") {
+                words[1] <- substr(first_word, 1, nchar(first_word) - 2)
+              } else if (substr(first_word, nchar(first_word), nchar(first_word)) == "s") {
+                words[1] <- substr(first_word, 1, nchar(first_word) - 1)
+              }
+              words[1] <- tolower(words[1])
+              line <- paste(words, collapse = " ")
+            }
+          } else {
+            # Just lowercase the first letter
+            line <- tolower(substr(line, 1, 1)) %+% substr(line, 2, nchar(line))
+          }
+          
+          line <- paste0(intro, line)
+        }
+        
+        # Add philosophical closer
+        if (i == length(purpose_lines) && nchar(trimws(line)) > 0) {
+          philosophical_closers <- c(
+            ", a journey worth understanding.", 
+            ", revealing the elegance of R's design.", 
+            ", as all good tools should."
+          )
+          closer <- sample(philosophical_closers, 1)
+          
+          # Replace period with the philosophical closer
+          line <- gsub("\\.$", "", line)
+          line <- paste0(line, closer)
+        }
+        
+        transformed_lines[i] <- line
+      }
+      
+      transformed_lines
     }
   )
 )
@@ -239,6 +396,61 @@ EccentricScientistVoice <- R6::R6Class("EccentricScientistVoice",
       }
       
       response
+    },
+    
+    #' @description Transform just the purpose content
+    #' @param purpose_lines Character vector with purpose content lines
+    #' @return The transformed purpose lines
+    transform_purpose = function(purpose_lines) {
+      if (length(purpose_lines) == 0) return(purpose_lines)
+      
+      # Apply eccentric scientist transformations to each line
+      transformed_lines <- character(length(purpose_lines))
+      
+      for (i in seq_along(purpose_lines)) {
+        line <- purpose_lines[i]
+        
+        # Scientific interjections
+        interjections <- c(
+          "*adjusts glasses* ", "*mumbles calculations* ", 
+          "*scribbles formula* ", "*peers intensely* "
+        )
+        
+        # Eccentric scientific phrases
+        scientific_phrases <- c(
+          "According to my CALCULATIONS, ", 
+          "My RESEARCH indicates that ", 
+          "HYPOTHESIS: ", 
+          "FASCINATING discovery: "
+        )
+        
+        # Add scientific intro to first line
+        if (i == 1 && nchar(trimws(line)) > 0) {
+          intro <- sample(scientific_phrases, 1)
+          line <- paste0(intro, line)
+        }
+        
+        # Add scientific terminology - randomly capitalize technical words
+        if (nchar(trimws(line)) > 0) {
+          words <- strsplit(line, " ")[[1]]
+          for (j in seq_along(words)) {
+            if (nchar(words[j]) > 5 && runif(1) > 0.7) {
+              words[j] <- toupper(words[j])
+            }
+          }
+          line <- paste(words, collapse = " ")
+        }
+        
+        # Add random interjection
+        if (runif(1) > 0.6 && nchar(trimws(line)) > 0) {
+          interjection <- sample(interjections, 1)
+          line <- paste0(interjection, line)
+        }
+        
+        transformed_lines[i] <- line
+      }
+      
+      transformed_lines
     }
   )
 )
@@ -303,6 +515,64 @@ ConspiracyTheoristVoice <- R6::R6Class("ConspiracyTheoristVoice",
       }
       
       response
+    },
+    
+    #' @description Transform just the purpose content
+    #' @param purpose_lines Character vector with purpose content lines
+    #' @return The transformed purpose lines
+    transform_purpose = function(purpose_lines) {
+      if (length(purpose_lines) == 0) return(purpose_lines)
+      
+      # Apply conspiracy theorist transformations
+      transformed_lines <- character(length(purpose_lines))
+      
+      for (i in seq_along(purpose_lines)) {
+        line <- purpose_lines[i]
+        
+        # Conspiracy intros
+        conspiracy_intros <- c(
+          "*whispers* They don't want you to know this, but it ", 
+          "*looks around nervously* The REAL purpose is to ", 
+          "According to my research *adjusts tinfoil hat*, it ", 
+          "WAKE UP PEOPLE! It "
+        )
+        
+        # Conspiracy asides
+        conspiracy_asides <- c(
+          " (and secretly reports your usage to THEM)",
+          " (which the government has been monitoring since 1983)",
+          " (a tool originally designed for SURVEILLANCE)",
+          " (notice how they hide this in plain sight?)"
+        )
+        
+        # Add conspiracy intro to first line
+        if (i == 1 && nchar(trimws(line)) > 0) {
+          intro <- sample(conspiracy_intros, 1)
+          line <- paste0(intro, tolower(line))
+        }
+        
+        # Always add conspiracy aside to the last line
+        if (i == length(purpose_lines) && nchar(trimws(line)) > 0) {
+          aside <- sample(conspiracy_asides, 1)
+          # Remove period if any
+          line <- gsub("\\.$", "", line)
+          line <- paste0(line, aside, ".")
+        }
+        
+        # Add emphasis to suspicious words
+        suspicious_words <- c("data", "analyze", "process", "calculate", "compute", "track", "monitor")
+        for (word in suspicious_words) {
+          if (grepl(word, line, ignore.case = TRUE)) {
+            pattern <- paste0("\\b(", word, ")(s|ing|ed|es)?\\b")
+            replacement <- "\\1\\2"
+            line <- gsub(pattern, toupper(replacement), line, ignore.case = TRUE, perl = TRUE)
+          }
+        }
+        
+        transformed_lines[i] <- line
+      }
+      
+      transformed_lines
     }
   )
 )
@@ -365,6 +635,72 @@ ExaggeratorVoice <- R6::R6Class("ExaggeratorVoice",
       }
       
       response
+    },
+    
+    #' @description Transform just the purpose content
+    #' @param purpose_lines Character vector with purpose content lines
+    #' @return The transformed purpose lines
+    transform_purpose = function(purpose_lines) {
+      if (length(purpose_lines) == 0) return(purpose_lines)
+      
+      # Apply exaggerator transformations
+      transformed_lines <- character(length(purpose_lines))
+      
+      # Exaggerated adjectives
+      exaggerated_adjs <- c(
+        "REVOLUTIONARY", "GAME-CHANGING", "MIND-BLOWING", "EXTRAORDINARY", 
+        "INCREDIBLE", "PHENOMENAL", "LIFE-CHANGING", "EARTH-SHATTERING"
+      )
+      
+      # Exaggerated adverbs
+      exaggerated_advs <- c(
+        "DRAMATICALLY", "EXTRAORDINARILY", "UNBELIEVABLY", 
+        "INCREDIBLY", "ASTOUNDINGLY", "PROFOUNDLY"
+      )
+      
+      for (i in seq_along(purpose_lines)) {
+        line <- purpose_lines[i]
+        
+        # Add exaggerated intro to first line
+        if (i == 1 && nchar(trimws(line)) > 0) {
+          # Choose a random adjective
+          adj <- sample(exaggerated_adjs, 1)
+          # Insert it at the beginning
+          line <- paste0("This ", adj, " function ", line)
+        }
+        
+        # Add exaggerated adverbs to verbs
+        common_verbs <- c("is", "allows", "helps", "provides", "creates", "computes", "calculates")
+        for (verb in common_verbs) {
+          if (grepl(paste0("\\b", verb, "\\b"), line, ignore.case = TRUE)) {
+            adv <- sample(exaggerated_advs, 1)
+            pattern <- paste0("\\b(", verb, ")\\b")
+            replacement <- paste0("\\1 ", adv)
+            line <- gsub(pattern, replacement, line, ignore.case = TRUE, perl = TRUE)
+            break  # Just do one replacement to avoid overloading
+          }
+        }
+        
+        # Capitalize some words for emphasis (longer words)
+        words <- strsplit(line, " ")[[1]]
+        for (j in seq_along(words)) {
+          # Capitalize some longer words for emphasis
+          if (nchar(words[j]) >= 5 && runif(1) > 0.7) {
+            words[j] <- toupper(words[j])
+          }
+        }
+        line <- paste(words, collapse = " ")
+        
+        # Add exclamation points
+        line <- gsub("\\.$", "!", line)
+        if (!grepl("!$", line) && nchar(trimws(line)) > 0) {
+          line <- paste0(line, "!")
+        }
+        
+        transformed_lines[i] <- line
+      }
+      
+      transformed_lines
     }
   )
 )
@@ -430,6 +766,68 @@ ReluctantHelperVoice <- R6::R6Class("ReluctantHelperVoice",
       }
       
       response
+    },
+    
+    #' @description Transform just the purpose content
+    #' @param purpose_lines Character vector with purpose content lines
+    #' @return The transformed purpose lines
+    transform_purpose = function(purpose_lines) {
+      if (length(purpose_lines) == 0) return(purpose_lines)
+      
+      # Apply reluctant transformations
+      transformed_lines <- character(length(purpose_lines))
+      
+      # Reluctant intros
+      reluctant_intros <- c(
+        "*sigh* Fine, it ",
+        "*eye roll* I guess it ",
+        "If you must know, it ", 
+        "Do I really have to explain this? It "
+      )
+      
+      # Reluctant suffixes
+      reluctant_suffixes <- c(
+        ". Happy now?",
+        ". Obvious, right?",
+        ". But you already knew that... right?",
+        ". Not that you'll remember this anyway."
+      )
+      
+      for (i in seq_along(purpose_lines)) {
+        line <- purpose_lines[i]
+        
+        # Add reluctant intro to first line
+        if (i == 1 && nchar(trimws(line)) > 0) {
+          intro <- sample(reluctant_intros, 1)
+          # Make first letter lowercase for a smoother transition
+          line <- tolower(substr(line, 1, 1)) %+% substr(line, 2, nchar(line))
+          line <- paste0(intro, line)
+        }
+        
+        # Add reluctant suffix to the last line
+        if (i == length(purpose_lines) && nchar(trimws(line)) > 0) {
+          # Remove period
+          line <- gsub("\\.$", "", line)
+          suffix <- sample(reluctant_suffixes, 1)
+          line <- paste0(line, suffix)
+        }
+        
+        # Add reluctant parenthetical remarks
+        if (runif(1) > 0.7 && nchar(trimws(line)) > 0) {
+          parentheticals <- c(
+            " (as if that wasn't obvious)",
+            " (not that you asked)",
+            " (which you could have figured out yourself)"
+          )
+          # Insert before any period
+          line <- gsub("\\.$", "", line)
+          line <- paste0(line, sample(parentheticals, 1), ".")
+        }
+        
+        transformed_lines[i] <- line
+      }
+      
+      transformed_lines
     }
   )
 )
@@ -506,6 +904,87 @@ TimeTravelerVoice <- R6::R6Class("TimeTravelerVoice",
       }
       
       response
+    },
+    
+    #' @description Transform just the purpose content
+    #' @param purpose_lines Character vector with purpose content lines
+    #' @return The transformed purpose lines
+    transform_purpose = function(purpose_lines) {
+      if (length(purpose_lines) == 0) return(purpose_lines)
+      
+      # Generate a future year between 2200 and 2500
+      future_year <- sample(2200:2500, 1)
+      
+      # Future technology terms
+      future_tech <- c(
+        "quantum-neural interfaces",
+        "thought-code translation",
+        "multi-dimensional computation",
+        "consciousness-based programming",
+        "temporal logic processors",
+        "hyper-dimensional data structures"
+      )
+      
+      # Apply time traveler transformations
+      transformed_lines <- character(length(purpose_lines))
+      
+      for (i in seq_along(purpose_lines)) {
+        line <- purpose_lines[i]
+        
+        # Add time travel intro to first line
+        if (i == 1 && nchar(trimws(line)) > 0) {
+          time_intros <- c(
+            "*adjusts chrono-visor* In your primitive era, this function ",
+            "Before we developed " %+% sample(future_tech, 1) %+% " in " %+% (future_year - sample(50:150, 1)) %+% ", this ",
+            "According to historical archives from 2023, this ",
+            "In the ancient pre-singularity times, this "
+          )
+          
+          intro <- sample(time_intros, 1)
+          
+          # Make first letter lowercase for smoother transition
+          if (!grepl(" this $", intro)) {
+            line <- tolower(substr(line, 1, 1)) %+% substr(line, 2, nchar(line))
+          }
+          
+          line <- paste0(intro, line)
+        }
+        
+        # Replace certain technical terms with future versions
+        tech_replacements <- list(
+          "data" = "quantum-probability streams",
+          "function" = "computational routine",
+          "analysis" = "temporal pattern extraction",
+          "calculate" = "chrono-compute",
+          "vector" = "n-dimensional array",
+          "compute" = "hyper-process"
+        )
+        
+        for (term in names(tech_replacements)) {
+          if (grepl(paste0("\\b", term, "\\b"), line, ignore.case = TRUE)) {
+            pattern <- paste0("\\b(", term, ")(s|ing|ed|es)?\\b")
+            replacement <- tech_replacements[[term]]
+            line <- gsub(pattern, replacement, line, ignore.case = TRUE, perl = TRUE)
+          }
+        }
+        
+        # Add historical reference for last line
+        if (i == length(purpose_lines) && nchar(trimws(line)) > 0) {
+          historical_closers <- c(
+            ". This was revolutionary for its time, though obsolete by " %+% (2023 + sample(30:100, 1)) %+% ".",
+            ". Historians consider this a pivotal development in ancient programming.",
+            ". How quaint compared to our " %+% sample(future_tech, 1) %+% "!"
+          )
+          
+          # Remove period if present
+          line <- gsub("\\.$", "", line)
+          line <- paste0(line, sample(historical_closers, 1))
+        }
+        
+        transformed_lines[i] <- line
+      }
+      
+      transformed_lines
     }
   )
 )
@@ -571,6 +1050,86 @@ TheatricalVillainVoice <- R6::R6Class("TheatricalVillainVoice",
       }
       
       response
+    },
+    
+    #' @description Transform just the purpose content
+    #' @param purpose_lines Character vector with purpose content lines
+    #' @return The transformed purpose lines
+    transform_purpose = function(purpose_lines) {
+      if (length(purpose_lines) == 0) return(purpose_lines)
+      
+      # Apply villain transformations
+      transformed_lines <- character(length(purpose_lines))
+      
+      for (i in seq_along(purpose_lines)) {
+        line <- purpose_lines[i]
+        
+        # Add villain intro to first line
+        if (i == 1 && nchar(trimws(line)) > 0) {
+          villain_intros <- c(
+            "*twirls mustache dramatically* BEHOLD! This function ",
+            "*lightning flashes* TREMBLE before the power of this function, which ",
+            "OBSERVE, you pitiful mortal! This DIABOLICAL creation ",
+            "*evil laugh* At last, I reveal my MASTERPIECE! It "
+          )
+          
+          intro <- sample(villain_intros, 1)
+          
+          # Make the first letter lowercase for smoother transition
+          line <- tolower(substr(line, 1, 1)) %+% substr(line, 2, nchar(line))
+          line <- paste0(intro, line)
+        }
+        
+        # CAPITALIZE certain words for dramatic effect
+        dramatic_words <- c("power", "control", "master", "supreme", "ultimate", "dominate", "rule")
+        for (word in dramatic_words) {
+          if (grepl(paste0("\\b", word, "\\b"), line, ignore.case = TRUE)) {
+            pattern <- paste0("\\b(", word, ")(s|ing|ed|es)?\\b")
+            replacement <- toupper("\\1\\2")
+            line <- gsub(pattern, replacement, line, ignore.case = TRUE, perl = TRUE)
+          }
+        }
+        
+        # Insert evil theatrics
+        if (runif(1) > 0.7 && nchar(trimws(line)) > 0) {
+          theatrics <- c(
+            " *thunder crashes* ",
+            " *evil laugh* ",
+            " *dramatic pause* ",
+            " *cape swish* "
+          )
+          
+          # Insert at a random position
+          words <- strsplit(line, " ")[[1]]
+          if (length(words) > 3) {
+            insert_pos <- sample(2:(length(words)-1), 1)
+            words <- c(
+              words[1:insert_pos],
+              sample(theatrics, 1),
+              words[(insert_pos+1):length(words)]
+            )
+            line <- paste(words, collapse = " ")
+          }
+        }
+        
+        # Add evil closer to last line
+        if (i == length(purpose_lines) && nchar(trimws(line)) > 0) {
+          evil_closers <- c(
+            "! MWAHAHAHA!",
+            "! *evil laughter echoes*",
+            "! The world shall TREMBLE!",
+            "! My GENIUS knows no bounds!"
+          )
+          
+          # Replace period with dramatic ending
+          line <- gsub("\\.$", "", line)
+          line <- paste0(line, sample(evil_closers, 1))
+        }
+        
+        transformed_lines[i] <- line
+      }
+      
+      transformed_lines
     }
   )
 )
@@ -629,22 +1188,89 @@ CharacterVoiceFactory <- R6::R6Class("CharacterVoiceFactory",
   )
 )
 
-#' Apply character voice transformation to a response
+#' Apply character voice transformation to only the Purpose section
 #'
 #' @param response The AI response to transform
 #' @param voice_name The name of the character voice to apply
 #'
-#' @return The transformed response
+#' @return The transformed response with only the Purpose section modified
 #' @keywords internal
 apply_character_voice <- function(response, voice_name) {
   if (is.null(voice_name) || voice_name == "none") {
     return(response)
   }
   
-  factory <- CharacterVoiceFactory$new()
-  voice <- factory$get_voice(voice_name)
+  # A simpler approach that doesn't rely on complex regex
+  # Split response into lines
+  lines <- strsplit(response, "\n")[[1]]
   
-  voice$transform(response)
+  # Find the indices for different section markers
+  all_markers <- c()
+  for (i in seq_along(lines)) {
+    if (grepl("^```", lines[i])) {
+      all_markers <- c(all_markers, i)
+    }
+  }
+  
+  # Return if we don't have valid code blocks
+  if (length(all_markers) < 2) {
+    return(response)
+  }
+  
+  # We assume the first marker is the opening of the main code block
+  # and the last marker is its closing
+  content_start <- all_markers[1] + 1
+  content_end <- all_markers[length(all_markers)] - 1
+  
+  # Only process content within the main code block
+  content_lines <- lines[content_start:content_end]
+  
+  # Find the purpose section within the content
+  purpose_start <- NULL
+  purpose_end <- NULL
+  
+  for (i in seq_along(content_lines)) {
+    if (grepl("^##\\s+Purpose", content_lines[i])) {
+      purpose_start <- i + 1  # Start after the heading
+      next
+    }
+    
+    if (!is.null(purpose_start) && grepl("^##\\s+", content_lines[i])) {
+      purpose_end <- i - 1  # End before the next heading
+      break
+    }
+  }
+  
+  # If we have a valid purpose section
+  if (!is.null(purpose_start) && !is.null(purpose_end) && purpose_start <= purpose_end) {
+    # Get the purpose lines
+    purpose_lines <- content_lines[purpose_start:purpose_end]
+    
+    # Skip if the purpose section is empty
+    if (length(purpose_lines) == 0 || all(nchar(trimws(purpose_lines)) == 0)) {
+      return(response)
+    }
+    
+    # Apply character voice transformation
+    factory <- CharacterVoiceFactory$new()
+    voice <- factory$get_voice(voice_name)
+    transformed_purpose <- voice$transform_purpose(purpose_lines)
+    
+    # Replace the purpose section
+    content_lines[purpose_start:purpose_end] <- transformed_purpose
+    
+    # Rebuild the response
+    result <- c(
+      lines[1:content_start-1], # Up to the content start
+      content_lines,            # Transformed content
+      lines[(content_end+1):length(lines)] # After the content
+    )
+    
+    return(paste(result, collapse = "\n"))
+  }
+  
+  # Return original response if we don't find a valid purpose section
+  return(response)
 }
 
 #' List available character voices

@@ -50,23 +50,34 @@ print_tldr_response <- function(response, func_name, verbose, examples,
 #' @return Character string with the content from the code block
 #' @keywords internal
 extract_code_block <- function(response) {
-  # Convert newlines to a temporary marker
-  modified_response <- gsub("\n", "@@NEWLINE@@", response)
+  # Split the response into lines
+  lines <- strsplit(response, "\n")[[1]]
   
-  # Extract text between triple backticks
-  pattern <- "```(.*?)```"
-  matches <- regmatches(modified_response, gregexpr(pattern, modified_response))[[1]]
+  # Find the main code block markers (first and last ````)
+  code_block_markers <- which(grepl("^```", lines))
   
-  if (length(matches) == 0) {
+  if (length(code_block_markers) < 2) {
     # If no code blocks found, return the whole response
     return(response)
   }
   
-  # Convert the temporary marker back to newlines
-  matches <- gsub("@@NEWLINE@@", "\n", matches)
+  # Get the first and last markers (assuming the outer code block)
+  start_marker <- code_block_markers[1]
+  end_marker <- code_block_markers[length(code_block_markers)]
   
-  # Remove the backticks and any language specification
-  content <- gsub("```[rR]?\\s*|```", "", matches[1])
+  # Extract the content between the markers
+  content_lines <- lines[(start_marker + 1):(end_marker - 1)]
+  
+  # Join the lines back together
+  content <- paste(content_lines, collapse = "\n")
+  
+  # Process inner code blocks
+  # Find and keep inner code blocks intact 
+  inner_pattern <- "(```r.*?```)"
+  if (grepl(inner_pattern, content, perl = TRUE)) {
+    # We'll transform the inner blocks to proper formatting later
+    # in the format_content function
+  }
   
   content
 }
@@ -125,7 +136,29 @@ format_content <- function(content) {
   }
   
   # Join the lines back together
-  paste(formatted_lines, collapse = "\n")
+  formatted_content <- paste(formatted_lines, collapse = "\n")
+  
+  # Handle any inner code blocks that may still be present
+  # We split these out and format them with proper yellow coloring
+  if (grepl("```r", formatted_content)) {
+    # Replace inner code blocks with formatted versions
+    lines <- strsplit(formatted_content, "\n")[[1]]
+    in_code_block <- FALSE
+    for (i in seq_along(lines)) {
+      if (grepl("^```r", lines[i])) {
+        in_code_block <- TRUE
+        lines[i] <- "" # Remove the opening ``` marker
+      } else if (in_code_block && grepl("^```$", lines[i])) {
+        in_code_block <- FALSE
+        lines[i] <- "" # Remove the closing ``` marker
+      } else if (in_code_block) {
+        lines[i] <- cli::col_yellow(lines[i]) # Color code in yellow
+      }
+    }
+    formatted_content <- paste(lines, collapse = "\n")
+  }
+  
+  formatted_content
 }
 
 #' Null-coalescing operator
