@@ -19,6 +19,8 @@
 #' @param async_mode Logical indicating whether to use asynchronous API calls
 #' @param timeout Numeric value specifying the API request timeout in seconds
 #' @param max_retries Numeric value specifying the maximum number of retries for API calls
+#' @param visualize Logical indicating whether to enable visualizations by default
+#' @param visualization_type Character string specifying the default visualization type
 #'
 #' @return Invisibly returns the updated configuration
 #' @export
@@ -35,6 +37,8 @@
 #' tldr_config(async_mode = TRUE)  # Enable asynchronous API calls
 #' tldr_config(timeout = 30)  # Set API request timeout to 30 seconds
 #' tldr_config(max_retries = 5)  # Set maximum number of retries to 5
+#' tldr_config(visualize = TRUE)  # Enable visualizations
+#' tldr_config(visualization_type = "diagram")  # Set visualization type
 #' }
 tldr_config <- function(api_key = NULL, openai_api_key = NULL, 
                        provider = NULL, model = NULL, openai_model = NULL,
@@ -42,7 +46,8 @@ tldr_config <- function(api_key = NULL, openai_api_key = NULL,
                        offline_mode = NULL, enable_fallback = NULL, fallback_provider = NULL,
                        verbose_default = NULL, examples_default = NULL, character_voice = NULL,
                        show_progress = NULL, debug_mode = NULL, async_mode = NULL,
-                       timeout = NULL, max_retries = NULL) {
+                       timeout = NULL, max_retries = NULL, visualize = NULL,
+                       visualization_type = NULL) {
   
   config <- get_config_all()
   
@@ -226,7 +231,14 @@ get_config_all <- function() {
       async_mode = FALSE,  # Asynchronous API calls
       timeout = 60,  # API request timeout in seconds
       max_retries = 3,  # Maximum number of retries for API calls
-      batch_size = 1  # Number of concurrent requests
+      batch_size = 1,  # Number of concurrent requests
+      
+      # Visualization settings
+      visualization_settings = list(
+        enable_visualization = FALSE,  # Enable visualizations
+        default_type = "diagram",  # Default visualization type
+        auto_install = FALSE  # Automatically install required packages
+      )
     )
     
     # Create directory if it doesn't exist

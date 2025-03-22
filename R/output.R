@@ -6,14 +6,16 @@
 #' @param examples Number of examples requested
 #' @param provider The LLM provider that generated the response
 #' @param voice The character voice used (if any)
+#' @param visualization Visualization handler object or NULL
 #'
 #' @return Invisibly returns NULL
 #' @keywords internal
 print_tldr_response <- function(response, func_name, verbose, examples, 
-                               provider = NULL, voice = NULL) {
+                               provider = NULL, voice = NULL, visualization = NULL) {
   if (get_config("debug_mode", default = FALSE)) {
     message("DEBUG: Printing response for function: ", func_name)
     message("DEBUG: Raw response length: ", nchar(response))
+    message("DEBUG: Visualization provided: ", !is.null(visualization))
   }
   
   # Extract the code block content
@@ -33,6 +35,17 @@ print_tldr_response <- function(response, func_name, verbose, examples,
     message("DEBUG: Formatted content length: ", nchar(formatted_content))
   }
   cat(formatted_content)
+  
+  # Display visualization if available
+  if (!is.null(visualization) && inherits(visualization, "VisualizationHandler")) {
+    if (!is.null(visualization$visualization_data$diagram)) {
+      cat("\n")
+      cli::cli_h2("Visualization")
+      
+      # Print the visualization
+      visualization$print()
+    }
+  }
   
   # Add a footer
   cat("\n")
@@ -55,6 +68,17 @@ print_tldr_response <- function(response, func_name, verbose, examples,
   context_aware <- attr(response, "context_aware") %||% FALSE
   if (context_aware) {
     cli::cli_text("{.emph Context awareness: Enabled}")
+  }
+  
+  # Add visualization info if used
+  if (!is.null(visualization) && inherits(visualization, "VisualizationHandler") && 
+      !is.null(visualization$visualization_data$vis_type)) {
+    vis_type <- visualization$visualization_data$vis_type
+    # Format visualization type for display (replace underscores with spaces, capitalize words)
+    display_vis_type <- gsub("_", " ", vis_type)
+    display_vis_type <- gsub("(^|\\s)([a-z])", "\\1\\U\\2", display_vis_type, perl = TRUE)
+    
+    cli::cli_text("{.emph Visualization: ", display_vis_type, "}")
   }
   
   cat("\n")
