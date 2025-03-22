@@ -44,6 +44,13 @@ tldr <- function(func_name, verbose = NULL, examples = NULL, refresh = FALSE,
   # Check for cached response
   cache_path <- get_cache_path(func_name, selected_provider)
   
+  # Debug information if debug mode is enabled
+  if (get_config("debug_mode", default = FALSE)) {
+    message("DEBUG: Function name: ", func_name)
+    message("DEBUG: Provider: ", selected_provider)
+    message("DEBUG: Cache path: ", cache_path)
+  }
+  
   if (!refresh && file.exists(cache_path)) {
     # Check if cache is expired
     cache_ttl <- get_config("cache_ttl", default = 30)
@@ -82,7 +89,17 @@ tldr <- function(func_name, verbose = NULL, examples = NULL, refresh = FALSE,
   
   # Get function metadata
   func_metadata <- tryCatch({
-    get_function_metadata(func_name, pkg)
+    metadata <- get_function_metadata(func_name, pkg)
+    
+    # Debug information if debug mode is enabled
+    if (get_config("debug_mode", default = FALSE)) {
+      message("DEBUG: Function metadata:")
+      message("DEBUG:   - Package: ", metadata$package)
+      message("DEBUG:   - Signature: ", metadata$signature)
+      message("DEBUG:   - Description: ", substr(metadata$description, 1, 50), "...")
+    }
+    
+    metadata
   }, error = function(e) {
     if (get_config("offline_mode", default = FALSE) && file.exists(cache_path)) {
       message("Function not found, using cached response (offline mode)")
@@ -109,8 +126,24 @@ tldr <- function(func_name, verbose = NULL, examples = NULL, refresh = FALSE,
     stop("Function information not cached and offline mode is enabled. Disable offline mode to fetch response.")
   }
   
+  # Debug information if debug mode is enabled
+  if (get_config("debug_mode", default = FALSE)) {
+    # Create a clean prompt with function name for debug output
+    debug_prompt <- gsub("\\{\\{FUNCTION_NAME\\}\\}", func_name, prompt, fixed = TRUE)
+    debug_prompt <- gsub("\\{\\{FUNCTION_SIGNATURE\\}\\}", func_metadata$signature, debug_prompt, fixed = TRUE)
+    debug_prompt <- gsub("\\{\\{PACKAGE_NAME\\}\\}", func_metadata$package, debug_prompt, fixed = TRUE)
+    
+    message("DEBUG: Generated prompt:")
+    message(debug_prompt)
+  }
+  
   # Get API response
   response <- get_ai_response(prompt, provider_override = selected_provider)
+  
+  # Debug information if debug mode is enabled
+  if (get_config("debug_mode", default = FALSE)) {
+    message("DEBUG: API Response (first 100 chars): ", substr(response, 1, 100))
+  }
   
   # Store provider info for output formatting
   attr(response, "provider") <- selected_provider

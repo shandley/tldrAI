@@ -6,6 +6,13 @@
 #' @return A list with function metadata
 #' @keywords internal
 get_function_metadata <- function(func_name, package = NULL) {
+  if (get_config("debug_mode", default = FALSE)) {
+    message("DEBUG: Getting metadata for function: ", func_name)
+    if (!is.null(package)) {
+      message("DEBUG: Package specified: ", package)
+    }
+  }
+  
   # Try to get the function from specified package first
   if (!is.null(package)) {
     if (!requireNamespace(package, quietly = TRUE)) {
@@ -15,11 +22,27 @@ get_function_metadata <- function(func_name, package = NULL) {
     # Check if function exists in the package
     if (exists(func_name, envir = asNamespace(package), inherits = FALSE)) {
       func <- get(func_name, envir = asNamespace(package))
+      
+      # Get basic function information
+      args <- names(formals(func))
+      args_str <- paste(args, collapse = ", ")
+      
+      # Get function body summary
+      body_str <- deparse(body(func))
+      body_str <- paste(body_str[1:min(5, length(body_str))], collapse = " ")
+      
+      if (get_config("debug_mode", default = FALSE)) {
+        message("DEBUG: Found function in specified package")
+        message("DEBUG: Arguments: ", args_str)
+      }
+      
       return(list(
         name = func_name,
         package = package,
         signature = get_function_signature(func_name, func),
-        description = get_function_description(func_name, package)
+        description = get_function_description(func_name, package),
+        args = args,
+        body_summary = body_str
       ))
     } else {
       stop("Function '", func_name, "' not found in package '", package, "'")
@@ -31,11 +54,27 @@ get_function_metadata <- function(func_name, package = NULL) {
     func <- get(func_name, mode = "function")
     pkg <- find_package(func_name)
     
+    # Get basic function information
+    args <- names(formals(func))
+    args_str <- paste(args, collapse = ", ")
+    
+    # Get function body summary
+    body_str <- deparse(body(func))
+    body_str <- paste(body_str[1:min(5, length(body_str))], collapse = " ")
+    
+    if (get_config("debug_mode", default = FALSE)) {
+      message("DEBUG: Found function in global environment")
+      message("DEBUG: Package detected: ", pkg)
+      message("DEBUG: Arguments: ", args_str)
+    }
+    
     return(list(
       name = func_name,
       package = pkg,
       signature = get_function_signature(func_name, func),
-      description = get_function_description(func_name, pkg)
+      description = get_function_description(func_name, pkg),
+      args = args,
+      body_summary = body_str
     ))
   } else {
     # Try to find the function in loaded packages
@@ -45,11 +84,18 @@ get_function_metadata <- function(func_name, package = NULL) {
       stop("Function '", func_name, "' not found")
     }
     
+    if (get_config("debug_mode", default = FALSE)) {
+      message("DEBUG: Found ", length(matches), " potential matches: ", paste(matches, collapse = ", "))
+    }
+    
     # If there are multiple matches, use the exact match if available
     if (length(matches) > 1) {
       exact_match <- matches[matches == func_name]
       if (length(exact_match) == 1) {
         func_name <- exact_match
+        if (get_config("debug_mode", default = FALSE)) {
+          message("DEBUG: Using exact match: ", func_name)
+        }
       } else {
         # Find the best match, prioritizing those from common packages
         common_packages <- c("base", "stats", "utils", "graphics", "ggplot2", "dplyr", "tidyr", "stringr", "lubridate", "purrr")
@@ -59,13 +105,31 @@ get_function_metadata <- function(func_name, package = NULL) {
             for (match in matches) {
               if (exists(match, envir = pkg_namespace, inherits = FALSE)) {
                 func_name <- match
+                
+                if (get_config("debug_mode", default = FALSE)) {
+                  message("DEBUG: Using match from common package: ", func_name, " from ", pkg)
+                }
+                
                 warning("Multiple functions named '", func_name, "' found. Using the one from '", pkg, "' package.\n",
                         "For a specific package, use the package::function notation (e.g., '", pkg, "::", func_name, "')")
+                
+                func <- get(func_name, envir = pkg_namespace)
+                
+                # Get basic function information
+                args <- names(formals(func))
+                args_str <- paste(args, collapse = ", ")
+                
+                # Get function body summary
+                body_str <- deparse(body(func))
+                body_str <- paste(body_str[1:min(5, length(body_str))], collapse = " ")
+                
                 return(list(
                   name = func_name,
                   package = pkg,
-                  signature = get_function_signature(func_name, get(func_name, envir = pkg_namespace)),
-                  description = get_function_description(func_name, pkg)
+                  signature = get_function_signature(func_name, func),
+                  description = get_function_description(func_name, pkg),
+                  args = args,
+                  body_summary = body_str
                 ))
               }
             }
@@ -74,21 +138,44 @@ get_function_metadata <- function(func_name, package = NULL) {
         
         # If no match in common packages, use the first one
         func_name <- matches[1]
+        
+        if (get_config("debug_mode", default = FALSE)) {
+          message("DEBUG: No match in common packages, using first match: ", func_name)
+        }
+        
         warning("Multiple functions named '", func_name, "' found. Using '", func_name, "'.\n",
                 "For more precise results, use the package::function notation (e.g., 'packagename::", func_name, "')")
       }
     } else {
       func_name <- matches[1]
+      if (get_config("debug_mode", default = FALSE)) {
+        message("DEBUG: Using single match: ", func_name)
+      }
     }
     
     func <- get(func_name, mode = "function")
     pkg <- find_package(func_name)
     
+    # Get basic function information
+    args <- names(formals(func))
+    args_str <- paste(args, collapse = ", ")
+    
+    # Get function body summary
+    body_str <- deparse(body(func))
+    body_str <- paste(body_str[1:min(5, length(body_str))], collapse = " ")
+    
+    if (get_config("debug_mode", default = FALSE)) {
+      message("DEBUG: Found function in package: ", pkg)
+      message("DEBUG: Arguments: ", args_str)
+    }
+    
     return(list(
       name = func_name,
       package = pkg,
       signature = get_function_signature(func_name, func),
-      description = get_function_description(func_name, pkg)
+      description = get_function_description(func_name, pkg),
+      args = args,
+      body_summary = body_str
     ))
   }
 }
@@ -161,6 +248,51 @@ get_function_signature <- function(func_name, func) {
   
   # Build the signature
   paste0(func_name, "(", paste(arg_strings, collapse = ", "), ")")
+}
+
+#' Show details about a function's metadata
+#'
+#' @param func_name The name of the function
+#' @param package The package name (optional)
+#'
+#' @return Invisibly returns the function metadata
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' tldr_function_details("mean")
+#' tldr_function_details("filter", "dplyr")
+#' }
+tldr_function_details <- function(func_name, package = NULL) {
+  # Enable debug mode temporarily
+  old_debug <- get_config("debug_mode", default = FALSE)
+  tryCatch({
+    tldr_config(debug_mode = TRUE)
+    
+    # Get function metadata
+    metadata <- get_function_metadata(func_name, package)
+    
+    # Print metadata
+    cat("\nFunction Details:", func_name, "\n")
+    cat("=======================\n")
+    cat("Package:", metadata$package, "\n")
+    cat("Signature:", metadata$signature, "\n")
+    cat("Description:", metadata$description, "\n")
+    cat("Arguments:", paste(metadata$args, collapse = ", "), "\n")
+    cat("Body (excerpt):", metadata$body_summary, "\n")
+    cat("\n")
+    
+    # Get the prompt that would be generated
+    prompt <- build_prompt(func_name, metadata, verbose = TRUE, examples = 2)
+    cat("Prompt for LLM:\n")
+    cat("=======================\n")
+    cat(prompt, "\n")
+    
+    invisible(metadata)
+  }, finally = {
+    # Restore original debug setting
+    tldr_config(debug_mode = old_debug)
+  })
 }
 
 #' Get the function description from help pages

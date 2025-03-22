@@ -11,15 +11,28 @@
 #' @keywords internal
 print_tldr_response <- function(response, func_name, verbose, examples, 
                                provider = NULL, voice = NULL) {
+  if (get_config("debug_mode", default = FALSE)) {
+    message("DEBUG: Printing response for function: ", func_name)
+    message("DEBUG: Raw response length: ", nchar(response))
+  }
+  
   # Extract the code block content
   content <- extract_code_block(response)
+  
+  if (get_config("debug_mode", default = FALSE)) {
+    message("DEBUG: Extracted content length: ", nchar(content))
+  }
   
   # Use cli to format the output nicely
   cat("\n")
   cli::cli_h1(paste0("tldrAI: ", func_name))
   
   # Print the content
-  cat(format_content(content))
+  formatted_content <- format_content(content)
+  if (get_config("debug_mode", default = FALSE)) {
+    message("DEBUG: Formatted content length: ", nchar(formatted_content))
+  }
+  cat(formatted_content)
   
   # Add a footer
   cat("\n")
@@ -50,15 +63,39 @@ print_tldr_response <- function(response, func_name, verbose, examples,
 #' @return Character string with the content from the code block
 #' @keywords internal
 extract_code_block <- function(response) {
+  if (get_config("debug_mode", default = FALSE)) {
+    message("DEBUG: Extracting code block from response")
+    message("DEBUG: Response starts with: ", substr(response, 1, 50))
+  }
+  
   # Split the response into lines
   lines <- strsplit(response, "\n")[[1]]
+  
+  # Try to extract a code block, but if there are no clear markers, we'll process the whole thing as markdown
+  
+  # If response starts with a markdown heading, it's already formatted 
+  if (grepl("^#\\s+", lines[1])) {
+    if (get_config("debug_mode", default = FALSE)) {
+      message("DEBUG: Response already in markdown format, returning whole response")
+    }
+    return(response)
+  }
   
   # Find the main code block markers (first and last ````)
   code_block_markers <- which(grepl("^```", lines))
   
   if (length(code_block_markers) < 2) {
+    if (get_config("debug_mode", default = FALSE)) {
+      message("DEBUG: No code block markers found, returning whole response")
+    }
     # If no code blocks found, return the whole response
     return(response)
+  }
+  
+  if (get_config("debug_mode", default = FALSE)) {
+    message("DEBUG: Found ", length(code_block_markers), " code block markers")
+    message("DEBUG: First marker at line ", code_block_markers[1])
+    message("DEBUG: Last marker at line ", code_block_markers[length(code_block_markers)])
   }
   
   # Get the first and last markers (assuming the outer code block)
@@ -71,10 +108,17 @@ extract_code_block <- function(response) {
   # Join the lines back together
   content <- paste(content_lines, collapse = "\n")
   
+  if (get_config("debug_mode", default = FALSE)) {
+    message("DEBUG: Extracted content starts with: ", substr(content, 1, 50))
+  }
+  
   # Process inner code blocks
   # Find and keep inner code blocks intact 
   inner_pattern <- "(```r.*?```)"
   if (grepl(inner_pattern, content, perl = TRUE)) {
+    if (get_config("debug_mode", default = FALSE)) {
+      message("DEBUG: Found inner code blocks")
+    }
     # We'll transform the inner blocks to proper formatting later
     # in the format_content function
   }
@@ -99,12 +143,16 @@ format_content <- function(content) {
   for (i in seq_along(lines)) {
     line <- lines[i]
     
+    # Check for top level headers (# Title) - color in bold green
+    if (grepl("^#\\s+[^#]", line)) {
+      formatted_lines[i] <- cli::col_green(cli::style_bold(line))
+    }
     # Check for section headers (## Title)
-    if (grepl("^##\\s+", line)) {
+    else if (grepl("^##\\s+", line)) {
       formatted_lines[i] <- cli::col_cyan(line)
     } 
     # Check for code blocks (```r)
-    else if (grepl("^```r", line)) {
+    else if (grepl("^```r", line) || grepl("^```\\s*$", line)) {
       in_r_code_block <- TRUE
       formatted_lines[i] <- ""
     }
@@ -129,6 +177,11 @@ format_content <- function(content) {
         formatted_lines[i] <- paste0("- ", bullet_text)
       }
     }
+    # Check for inline code with backticks
+    else if (grepl("`[^`]+`", line)) {
+      # Replace inline code with yellow color
+      formatted_lines[i] <- gsub("`([^`]+)`", cli::col_yellow("\\1"), line, perl = TRUE)
+    }
     # Regular text
     else {
       formatted_lines[i] <- line
@@ -140,12 +193,12 @@ format_content <- function(content) {
   
   # Handle any inner code blocks that may still be present
   # We split these out and format them with proper yellow coloring
-  if (grepl("```r", formatted_content)) {
+  if (grepl("```r", formatted_content) || grepl("```$", formatted_content)) {
     # Replace inner code blocks with formatted versions
     lines <- strsplit(formatted_content, "\n")[[1]]
     in_code_block <- FALSE
     for (i in seq_along(lines)) {
-      if (grepl("^```r", lines[i])) {
+      if (grepl("^```r", lines[i]) || grepl("^```\\s*$", lines[i])) {
         in_code_block <- TRUE
         lines[i] <- "" # Remove the opening ``` marker
       } else if (in_code_block && grepl("^```$", lines[i])) {

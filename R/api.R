@@ -403,6 +403,8 @@ get_ai_response <- function(prompt, provider_override = NULL) {
   
   # Cache the successful response
   if (get_config("cache_enabled", default = TRUE)) {
+    # We use digest to create a unique hash based on the prompt and provider
+    # This ensures different functions with similar names don't collide
     cache_key <- digest::digest(list(prompt = prompt, provider = provider$provider_name), algo = "sha256")
     cache_path <- file.path(get_config("cache_dir"), paste0(cache_key, ".rds"))
     

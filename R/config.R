@@ -15,6 +15,7 @@
 #' @param examples_default Integer indicating the default number of examples
 #' @param character_voice Character string specifying the default character voice
 #' @param show_progress Logical indicating whether to show a progress bar during API calls
+#' @param debug_mode Logical indicating whether to show debug information
 #'
 #' @return Invisibly returns the updated configuration
 #' @export
@@ -34,7 +35,7 @@ tldr_config <- function(api_key = NULL, openai_api_key = NULL,
                        cache_enabled = NULL, cache_dir = NULL, cache_ttl = NULL,
                        offline_mode = NULL, enable_fallback = NULL, fallback_provider = NULL,
                        verbose_default = NULL, examples_default = NULL, character_voice = NULL,
-                       show_progress = NULL) {
+                       show_progress = NULL, debug_mode = NULL) {
   
   config <- get_config_all()
   
@@ -114,6 +115,13 @@ tldr_config <- function(api_key = NULL, openai_api_key = NULL,
     config$show_progress <- show_progress
   }
   
+  if (!is.null(debug_mode)) {
+    if (!is.logical(debug_mode)) {
+      stop("debug_mode must be a logical value (TRUE or FALSE)")
+    }
+    config$debug_mode <- debug_mode
+  }
+  
   # Save the updated config
   save_config(config)
   
@@ -174,7 +182,8 @@ get_config_all <- function() {
       character_voice = "none",  # Default to no character voice
       
       # UI settings
-      show_progress = TRUE  # Show progress bar by default
+      show_progress = TRUE,  # Show progress bar by default
+      debug_mode = FALSE  # Debug mode
     )
     
     # Create directory if it doesn't exist
@@ -322,6 +331,12 @@ get_cache_path <- function(func_name, provider = NULL) {
     cache_key <- func_name
   }
   
+  # Make the cache key more unique by including package information if available
+  pkg <- find_package(func_name)
+  if (!is.null(pkg) && pkg != "unknown") {
+    cache_key <- paste0(pkg, "__", cache_key)
+  }
+  
   file.path(cache_dir, paste0(cache_key, ".rds"))
 }
 
@@ -344,6 +359,30 @@ tldr_offline <- function(enable = TRUE) {
     message("Offline mode enabled. Only cached responses will be used.")
   } else {
     message("Offline mode disabled. API calls will be made when needed.")
+  }
+  
+  invisible(get_config_all())
+}
+
+#' Toggle debug mode
+#'
+#' @param enable Logical indicating whether to enable (TRUE) or disable (FALSE) debug mode
+#'
+#' @return Invisibly returns the updated configuration
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' tldr_debug(TRUE)  # Enable debug mode
+#' tldr_debug(FALSE) # Disable debug mode
+#' }
+tldr_debug <- function(enable = TRUE) {
+  tldr_config(debug_mode = enable)
+  
+  if (enable) {
+    message("Debug mode enabled. Additional diagnostic information will be shown.")
+  } else {
+    message("Debug mode disabled.")
   }
   
   invisible(get_config_all())

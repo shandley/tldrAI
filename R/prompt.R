@@ -8,18 +8,54 @@
 #' @return Character string containing the prompt
 #' @keywords internal
 build_prompt <- function(func_name, func_metadata, verbose, examples) {
-  template <- get_prompt_template()
+  # Get the raw template first
+  template <- "
+I need help documenting the R function 'mean' from the base package.
+
+Please write a concise, practical help summary for the 'mean' function that explains:
+
+1. Its purpose (calculating the arithmetic mean of values)
+2. Basic usage (mean(x))
+3. Key arguments (what x can be, and what the ... is for)
+4. 2-3 practical examples of using the function
+5. Common pitfalls or gotchas
+6. Related functions (like median, sum, etc.)
+7. When to use mean vs alternatives
+
+Format the response as a markdown document with clear section headers.
+"
   
-  # Replace placeholders in template
-  prompt <- template
-  prompt <- gsub("\\{\\{FUNCTION_NAME\\}\\}", func_name, prompt, fixed = TRUE)
-  prompt <- gsub("\\{\\{FUNCTION_SIGNATURE\\}\\}", func_metadata$signature, prompt, fixed = TRUE)
-  prompt <- gsub("\\{\\{FUNCTION_DESCRIPTION\\}\\}", func_metadata$description, prompt, fixed = TRUE)
-  prompt <- gsub("\\{\\{PACKAGE_NAME\\}\\}", func_metadata$package, prompt, fixed = TRUE)
-  prompt <- gsub("\\{\\{EXAMPLES_REQUESTED\\}\\}", as.character(examples), prompt, fixed = TRUE)
-  prompt <- gsub("\\{\\{VERBOSE\\}\\}", ifelse(verbose, "YES", "NO"), prompt, fixed = TRUE)
+  # Replace the function name and package with the actual values
+  if (func_name != "mean") {
+    template <- gsub("mean", func_name, template, fixed = TRUE)
+  }
+  if (func_metadata$package != "base") {
+    template <- gsub("base", func_metadata$package, template, fixed = TRUE)
+  }
   
-  prompt
+  # Add specific signature information
+  if (!is.null(func_metadata$signature)) {
+    signature_info <- paste0("\nThe function signature is: ", func_metadata$signature)
+    template <- paste0(template, signature_info)
+  }
+  
+  # Add arguments info
+  if (!is.null(func_metadata$args)) {
+    args_str <- paste(func_metadata$args, collapse = ", ")
+    args_info <- paste0("\nThe function arguments are: ", args_str)
+    template <- paste0(template, args_info)
+  }
+  
+  # Add examples request
+  examples_info <- paste0("\nPlease include ", as.character(examples), " practical examples.")
+  template <- paste0(template, examples_info)
+  
+  # Add verbose flag
+  if (verbose) {
+    template <- paste0(template, "\nPlease include detailed information about common pitfalls, related functions, and when to use this function vs alternatives.")
+  }
+  
+  template
 }
 
 #' Get the default prompt template
@@ -30,13 +66,18 @@ get_prompt_template <- function() {
   # This could be customizable and loaded from a file in the future
   return('
 You are tldrAI, a tool that provides concise, practical help for R functions.
-Your goal is to create a brief, helpful summary of the R function {{FUNCTION_NAME}} from the {{PACKAGE_NAME}} package.
+Your goal is to create a brief, helpful summary of the R function "{{FUNCTION_NAME}}" (exactly as written) from the {{PACKAGE_NAME}} package.
 
-Here is information about the function:
+IMPORTANT: You MUST only provide information about the exact function named "{{FUNCTION_NAME}}" and nothing else. Do not provide information about other R functions with similar names or from different packages.
+
+Here is detailed information about the function:
+Function name: "{{FUNCTION_NAME}}" (You MUST document exactly this function)
 Function signature: {{FUNCTION_SIGNATURE}}
 Function description: {{FUNCTION_DESCRIPTION}}
+Function arguments: {{FUNCTION_ARGS}}
+Function implementation: {{FUNCTION_BODY}}
 
-Please provide a response in the following format:
+Please provide a response in the following format, and ONLY for the function "{{FUNCTION_NAME}}" - you MUST NOT document any other function:
 
 ```
 # {{FUNCTION_NAME}}
