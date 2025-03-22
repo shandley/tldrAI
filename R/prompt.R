@@ -4,10 +4,11 @@
 #' @param func_metadata Metadata about the function
 #' @param verbose Whether to request verbose output
 #' @param examples Number of examples to request
+#' @param context_data Optional context data from the context analyzer
 #'
 #' @return Character string containing the prompt
 #' @keywords internal
-build_prompt <- function(func_name, func_metadata, verbose, examples) {
+build_prompt <- function(func_name, func_metadata, verbose, examples, context_data = NULL) {
   # Get the template
   template <- get_prompt_template()
   
@@ -46,6 +47,16 @@ build_prompt <- function(func_name, func_metadata, verbose, examples) {
   verbose_str <- ifelse(verbose, "YES", "NO")
   template <- gsub("{{VERBOSE}}", verbose_str, template, fixed = TRUE)
   
+  # Add context data if available
+  if (!is.null(context_data)) {
+    context_str <- context_data
+    template <- gsub("{{CONTEXT_DATA}}", context_str, template, fixed = TRUE)
+    template <- gsub("{{HAS_CONTEXT}}", "YES", template, fixed = TRUE)
+  } else {
+    template <- gsub("{{CONTEXT_DATA}}", "", template, fixed = TRUE)
+    template <- gsub("{{HAS_CONTEXT}}", "NO", template, fixed = TRUE)
+  }
+  
   template
 }
 
@@ -67,6 +78,9 @@ Function signature: {{FUNCTION_SIGNATURE}}
 Function description: {{FUNCTION_DESCRIPTION}}
 Function arguments: {{FUNCTION_ARGS}}
 Function implementation: {{FUNCTION_BODY}}
+
+Context awareness mode is set to: {{HAS_CONTEXT}}
+{{CONTEXT_DATA}}
 
 Please provide a response in the following format, and ONLY for the function "{{FUNCTION_NAME}}" - you MUST NOT document any other function:
 
@@ -98,6 +112,13 @@ If verbose is YES, include additional sections on:
 1. Common gotchas or pitfalls
 2. Related functions that are commonly used with this one
 3. A brief note on when to use this function vs alternatives
+
+If context awareness mode is YES:
+1. Make examples relevant to the user\'s environment, using their actual data frames and variables when appropriate
+2. Tailor examples to fit with packages they already have loaded
+3. Show how this function fits into their current workflow based on command history
+4. Consider the user\'s data structures when explaining function use cases
+5. If the function works with data frames, use column names from the user\'s actual data frames in examples
 
 Keep all responses concise and focused on practical usage. Prioritize examples over lengthy explanations.
 ')

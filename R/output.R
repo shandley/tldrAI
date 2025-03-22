@@ -51,6 +51,12 @@ print_tldr_response <- function(response, func_name, verbose, examples,
     cli::cli_text("{.emph Character voice: ", display_voice, "}")
   }
   
+  # Add context awareness info if used
+  context_aware <- attr(response, "context_aware") %||% FALSE
+  if (context_aware) {
+    cli::cli_text("{.emph Context awareness: Enabled}")
+  }
+  
   cat("\n")
   
   invisible(NULL)
