@@ -110,8 +110,10 @@ get_function_metadata <- function(func_name, package = NULL) {
                   message("DEBUG: Using match from common package: ", func_name, " from ", pkg)
                 }
                 
-                warning("Multiple functions named '", func_name, "' found. Using the one from '", pkg, "' package.\n",
-                        "For a specific package, use the package::function notation (e.g., '", pkg, "::", func_name, "')")
+                warning("Function ambiguity detected: multiple functions named '", func_name, "' found. Using the one from '", pkg, "' package.\n\n",
+                        "To get the correct help:\n",
+                        "  * tldr('", pkg, "::", func_name, "')\n",
+                        "  * Or first load the package with library(", pkg, ")")
                 
                 func <- get(func_name, envir = pkg_namespace)
                 
@@ -138,13 +140,33 @@ get_function_metadata <- function(func_name, package = NULL) {
         
         # If no match in common packages, use the first one
         func_name <- matches[1]
+        pkg_guess <- find_package(func_name)
         
         if (get_config("debug_mode", default = FALSE)) {
           message("DEBUG: No match in common packages, using first match: ", func_name)
         }
         
-        warning("Multiple functions named '", func_name, "' found. Using '", func_name, "'.\n",
-                "For more precise results, use the package::function notation (e.g., 'packagename::", func_name, "')")
+        # Check if the function might be from ggplot2, dplyr, or other popular packages
+        suggested_packages <- c()
+        for (potential_pkg in c("ggplot2", "dplyr", "tidyr", "purrr", "stringr", "lubridate")) {
+          if (requireNamespace(potential_pkg, quietly = TRUE)) {
+            if (exists(func_name, envir = asNamespace(potential_pkg), inherits = FALSE)) {
+              suggested_packages <- c(suggested_packages, potential_pkg)
+            }
+          }
+        }
+        
+        if (length(suggested_packages) > 0) {
+          suggestions <- paste0(suggested_packages, "::", func_name)
+          suggestion_text <- paste(suggestions, collapse = "' or '")
+          warning("Function ambiguity detected: multiple functions named '", func_name, "' found. Using '", pkg_guess, "::", func_name, "'.\n\n",
+                  "To get help for a specific package's function, try:\n",
+                  "  * tldr('", suggestion_text, "')\n",
+                  "  * First load the package with library(", suggested_packages[1], ")\n\n",
+                  "Popular packages with a '", func_name, "' function: ", paste(suggested_packages, collapse = ", "))
+        } else {
+          warning("Multiple functions named '", func_name, "' found. Using '", pkg_guess, "::", func_name, "'.\n",
+                  "For more precise results, use the package::function notation (e.g., 'packagename::", func_name, "')")
       }
     } else {
       func_name <- matches[1]

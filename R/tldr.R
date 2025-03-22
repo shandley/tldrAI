@@ -15,12 +15,16 @@
 #' @examples
 #' \dontrun{
 #' tldr("mean")
-#' tldr("ggplot", examples = 3)
+#' tldr("ggplot2::ggplot", examples = 3)
 #' tldr("dplyr::filter", provider = "openai")
 #' tldr("median", voice = "enthusiastic_explorer")
 #' tldr("sd", voice = "cynical_detective")
 #' tldr("plot", async = TRUE)  # Make an asynchronous API call
 #' tldr("filter", context = TRUE)  # Use contextual awareness
+#' 
+#' # Load a package first to avoid function ambiguity
+#' library(ggplot2)
+#' tldr("ggplot")
 #' }
 tldr <- function(func_name, verbose = NULL, examples = NULL, refresh = FALSE, 
                 provider = NULL, voice = NULL, async = NULL, context = NULL) {
