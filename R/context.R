@@ -431,6 +431,29 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
                                            func_name, df_name))
           }
         }
+        # stringr functions
+        else if (func_package == "stringr" && func_name %in% c("str_detect", "str_extract", "str_replace", "str_replace_all", 
+                                                               "str_split", "str_trim", "str_squish", "str_length", 
+                                                               "str_to_upper", "str_to_lower", "str_to_title", "str_c")) {
+          if (requireNamespace("stringr", quietly = TRUE)) {
+            examples <- c(examples, self$generate_stringr_example(func_name, df_name, df_info))
+          } else {
+            examples <- c(examples, sprintf("# To use stringr::%s with your '%s' data frame:\n# First install the package: install.packages(\"stringr\")", 
+                                           func_name, df_name))
+          }
+        }
+        # lubridate functions
+        else if (func_package == "lubridate" && func_name %in% c("ymd", "mdy", "dmy", "ymd_hms", "year", "month", "day",
+                                                                 "hour", "minute", "second", "wday", "yday", "interval",
+                                                                 "as_date", "as_datetime", "days", "weeks", "months", "years",
+                                                                 "floor_date", "ceiling_date", "round_date", "now", "with_tz", "force_tz")) {
+          if (requireNamespace("lubridate", quietly = TRUE)) {
+            examples <- c(examples, self$generate_lubridate_example(func_name, df_name, df_info))
+          } else {
+            examples <- c(examples, sprintf("# To use lubridate::%s with your '%s' data frame:\n# First install the package: install.packages(\"lubridate\")", 
+                                           func_name, df_name))
+          }
+        }
         # data.table functions
         else if (func_package == "data.table" && func_name %in% c("[", "data.table", "setkey", "setDT", "setDF", "fread", "fwrite", "melt", "dcast", "rbindlist")) {
           if (requireNamespace("data.table", quietly = TRUE)) {
@@ -1636,6 +1659,12 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
       } else if (func_package == "stats" && func_name %in% c("lm", "glm")) {
         suggestions <- c(suggestions, 
                        "Next steps: Examine the model with summary(), plot diagnostics with plot(), or make predictions with predict()")
+      } else if (func_package == "stringr") {
+        suggestions <- c(suggestions,
+                       "Next steps: Consider piping text processing results to other stringr functions or use regex patterns for more advanced matching")
+      } else if (func_package == "lubridate") {
+        suggestions <- c(suggestions,
+                       "Next steps: After date manipulation, consider aggregating by time periods or creating time-based visualizations")
       }
       
       # Add general workflow suggestions based on recent function usage
@@ -1649,6 +1678,162 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
       }
       
       suggestions
+    },
+    
+    #' @description Generate example for stringr text manipulation functions
+    #' @param func_name Name of the function
+    #' @param df_name Name of the data frame
+    #' @param df_info Information about the data frame
+    #' @return Example string
+    generate_stringr_example = function(func_name, df_name, df_info) {
+      # Get column names
+      col_names <- df_info$column_names
+      col_types <- df_info$column_types
+      
+      if (length(col_names) == 0) {
+        return(sprintf("# Using stringr::%s with your '%s' data frame\n# First select text columns to work with", 
+                      func_name, df_name))
+      }
+      
+      # Find the first character/string column if available
+      string_col <- NULL
+      if (!is.null(col_types) && length(col_types) > 0) {
+        for (i in seq_along(col_types)) {
+          if (col_types[i] %in% c("character", "factor", "String")) {
+            string_col <- col_names[i]
+            break
+          }
+        }
+      }
+      
+      # If no string column was found, use the first column
+      if (is.null(string_col) && length(col_names) > 0) {
+        string_col <- col_names[1]
+      }
+      
+      # Generate examples based on function
+      if (func_name == "str_detect") {
+        return(sprintf("# Detect pattern in the '%s' column of your '%s' data frame\n%s |>\n  dplyr::filter(stringr::%s(%s, pattern = \"[A-Z]\"))", 
+                      string_col, df_name, df_name, func_name, string_col))
+      } 
+      else if (func_name == "str_extract") {
+        return(sprintf("# Extract pattern from the '%s' column of your '%s' data frame\n%s |>\n  dplyr::mutate(extracted = stringr::%s(%s, pattern = \"\\\\w+\"))",
+                      string_col, df_name, df_name, func_name, string_col))
+      }
+      else if (func_name == "str_replace" || func_name == "str_replace_all") {
+        return(sprintf("# Replace pattern in the '%s' column of your '%s' data frame\n%s |>\n  dplyr::mutate(%s_clean = stringr::%s(%s, pattern = \"[^\\\\w\\\\s]\", replacement = \"\"))",
+                      string_col, df_name, df_name, string_col, func_name, string_col))
+      }
+      else if (func_name == "str_split") {
+        return(sprintf("# Split strings in the '%s' column of your '%s' data frame\n# Using simplify=TRUE returns a matrix\nsplit_result <- stringr::%s(%s$%s, pattern = \"\\\\s+\", simplify = TRUE)",
+                      string_col, df_name, func_name, df_name, string_col))
+      }
+      else if (func_name == "str_trim" || func_name == "str_squish") {
+        return(sprintf("# Clean whitespace in the '%s' column of your '%s' data frame\n%s |>\n  dplyr::mutate(%s_clean = stringr::%s(%s))",
+                      string_col, df_name, df_name, string_col, func_name, string_col))
+      }
+      else if (func_name == "str_length") {
+        return(sprintf("# Get string lengths from the '%s' column of your '%s' data frame\n%s |>\n  dplyr::mutate(%s_length = stringr::%s(%s))",
+                      string_col, df_name, df_name, string_col, func_name, string_col))
+      }
+      else if (func_name == "str_to_upper" || func_name == "str_to_lower" || func_name == "str_to_title") {
+        return(sprintf("# Change case in the '%s' column of your '%s' data frame\n%s |>\n  dplyr::mutate(%s_mod = stringr::%s(%s))",
+                      string_col, df_name, df_name, string_col, func_name, string_col))
+      }
+      else if (func_name == "str_c") {
+        if (length(col_names) >= 2) {
+          return(sprintf("# Combine strings from columns in your '%s' data frame\n%s |>\n  dplyr::mutate(combined = stringr::%s(%s, %s, sep = \" - \"))",
+                        df_name, df_name, func_name, col_names[1], col_names[2]))
+        } else {
+          return(sprintf("# Combine strings in your '%s' data frame\n%s |>\n  dplyr::mutate(combined = stringr::%s(%s, \"_suffix\", sep = \"\"))",
+                        df_name, df_name, func_name, string_col))
+        }
+      }
+      else {
+        # Generic example for other stringr functions
+        return(sprintf("# Apply stringr::%s to the '%s' column of your '%s' data frame\n%s |>\n  dplyr::mutate(result = stringr::%s(%s))",
+                      func_name, string_col, df_name, df_name, func_name, string_col))
+      }
+    },
+    
+    #' @description Generate example for lubridate date/time functions
+    #' @param func_name Name of the function
+    #' @param df_name Name of the data frame
+    #' @param df_info Information about the data frame
+    #' @return Example string
+    generate_lubridate_example = function(func_name, df_name, df_info) {
+      # Get column names and types
+      col_names <- df_info$column_names
+      col_types <- df_info$column_types
+      
+      if (length(col_names) == 0) {
+        return(sprintf("# Using lubridate::%s with your '%s' data frame\n# First select date/time columns to work with", 
+                      func_name, df_name))
+      }
+      
+      # Find the first date/time column if available
+      date_col <- NULL
+      if (!is.null(col_types) && length(col_types) > 0) {
+        for (i in seq_along(col_types)) {
+          if (col_types[i] %in% c("Date", "POSIXct", "POSIXlt", "POSIXt")) {
+            date_col <- col_names[i]
+            break
+          }
+        }
+      }
+      
+      # If no date column was found, use the first column
+      if (is.null(date_col) && length(col_names) > 0) {
+        date_col <- col_names[1]
+      }
+      
+      # Generate examples based on function
+      if (func_name %in% c("ymd", "mdy", "dmy", "ymd_hms")) {
+        return(sprintf("# Parse dates in the '%s' column of your '%s' data frame\n%s |>\n  dplyr::mutate(%s_date = lubridate::%s(%s))",
+                      date_col, df_name, df_name, date_col, func_name, date_col))
+      }
+      else if (func_name %in% c("year", "month", "day", "hour", "minute", "second", "wday", "yday")) {
+        return(sprintf("# Extract %s from the '%s' column of your '%s' data frame\n%s |>\n  dplyr::mutate(%s_%s = lubridate::%s(%s))",
+                      func_name, date_col, df_name, df_name, date_col, func_name, func_name, date_col))
+      }
+      else if (func_name == "interval") {
+        if (length(col_names) >= 2) {
+          return(sprintf("# Create an interval between two date columns in your '%s' data frame\n%s |>\n  dplyr::mutate(date_interval = lubridate::%s(%s, %s))",
+                        df_name, df_name, func_name, col_names[1], col_names[2]))
+        } else {
+          return(sprintf("# Create an interval in your '%s' data frame\n%s |>\n  dplyr::mutate(date_interval = lubridate::%s(%s, %s + lubridate::days(30)))",
+                        df_name, df_name, func_name, date_col, date_col))
+        }
+      }
+      else if (func_name %in% c("as_date", "as_datetime")) {
+        return(sprintf("# Convert '%s' column in your '%s' data frame to a date/datetime\n%s |>\n  dplyr::mutate(%s_converted = lubridate::%s(%s))",
+                      date_col, df_name, df_name, date_col, func_name, date_col))
+      }
+      else if (func_name %in% c("days", "weeks", "months", "years", "hours", "minutes", "seconds")) {
+        return(sprintf("# Add time units to '%s' column in your '%s' data frame\n%s |>\n  dplyr::mutate(%s_future = %s + lubridate::%s(10))",
+                      date_col, df_name, df_name, date_col, date_col, func_name))
+      }
+      else if (func_name %in% c("floor_date", "ceiling_date", "round_date")) {
+        return(sprintf("# Round dates in the '%s' column of your '%s' data frame\n%s |>\n  dplyr::mutate(%s_rounded = lubridate::%s(%s, unit = \"month\"))",
+                      date_col, df_name, df_name, date_col, func_name, date_col))
+      }
+      else if (func_name == "now") {
+        return(sprintf("# Compare dates in '%s' to current time\n%s |>\n  dplyr::mutate(is_past = %s < lubridate::%s())",
+                      date_col, df_name, date_col, func_name))
+      }
+      else if (func_name == "with_tz" || func_name == "force_tz") {
+        return(sprintf("# Change timezone of dates in the '%s' column of your '%s' data frame\n%s |>\n  dplyr::mutate(%s_utc = lubridate::%s(%s, tzone = \"UTC\"))",
+                      date_col, df_name, df_name, date_col, func_name, date_col))
+      }
+      else if (func_name == "is.Date" || func_name == "is.POSIXct" || func_name == "is.POSIXlt") {
+        return(sprintf("# Check if '%s' is a specific date type\nany(lubridate::%s(%s$%s))",
+                      date_col, func_name, df_name, date_col))
+      }
+      else {
+        # Generic example for other lubridate functions
+        return(sprintf("# Apply lubridate::%s to the '%s' column of your '%s' data frame\n%s |>\n  dplyr::mutate(result = lubridate::%s(%s))",
+                      func_name, date_col, df_name, df_name, func_name, date_col))
+      }
     }
   ),
   
