@@ -494,7 +494,13 @@ print_explanation_response <- function(response, code, detail_level, highlight, 
   cat("\n")
   cli::cli_h1("tldrAI: Code Explanation")
   
-  # Print the content
+  # Special pre-processing for code explanations to fix formatting issues
+  if (grepl("## Key Concepts", content, fixed = TRUE)) {
+    # Fix potential issues with NA values in key concepts section
+    content <- gsub("(- [^:]+:[^\\n]+): NA", "\\1", content)
+  }
+  
+  # Format the content
   formatted_content <- format_content(content)
   if (get_config("debug_mode", default = FALSE)) {
     message("DEBUG: Formatted content length: ", nchar(formatted_content))

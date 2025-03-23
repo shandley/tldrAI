@@ -245,10 +245,22 @@ format_content <- function(content) {
     else if (grepl("^-\\s+", line)) {
       # Extract the bullet point text
       bullet_text <- gsub("^-\\s+", "", line)
-      # Split by colon if present
+      # Split by colon if present and handle explanation bullet points differently
       if (grepl(":", bullet_text)) {
-        parts <- strsplit(bullet_text, ":\\s*", 2)[[1]]
-        formatted_lines[i] <- paste0("- ", cli::col_green(parts[1]), ": ", parts[2])
+        # Special handling for key concepts and similar sections with explanations after colons
+        if (grepl("^[^:]+:.*\\.$", bullet_text)) {
+          # This is a bullet with an explanation that ends with a period - keep all content
+          parts <- strsplit(bullet_text, ":\\s*", 2)[[1]]
+          if (length(parts) == 2) {
+            formatted_lines[i] <- paste0("- ", cli::col_green(parts[1]), ": ", parts[2])
+          } else {
+            formatted_lines[i] <- paste0("- ", bullet_text)
+          }
+        } else {
+          # Normal key-value pair handling
+          parts <- strsplit(bullet_text, ":\\s*", 2)[[1]]
+          formatted_lines[i] <- paste0("- ", cli::col_green(parts[1]), ": ", parts[2])
+        }
       } else {
         formatted_lines[i] <- paste0("- ", bullet_text)
       }
