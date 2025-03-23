@@ -61,8 +61,8 @@ ClaudeProvider <- R6::R6Class("ClaudeProvider",
         "claude-2.1"
       )
       
-      # Set API key, model, and performance settings
-      self$api_key <- config$api_key
+      # Try to get API key from keyring, environment variables, or config
+      self$api_key <- get_api_key("claude")
       self$model <- config$model
       
       # Set custom timeout and max_retries if provided
@@ -80,7 +80,10 @@ ClaudeProvider <- R6::R6Class("ClaudeProvider",
           "│                                                                       │\n",
           "│ You need to set up your Claude API key before using this provider.    │\n",
           "│                                                                       │\n",
-          "│ To set up your API key, run:                                          │\n",
+          "│ To set up your API key securely, run:                                 │\n",
+          "│ tldr_set_api_key(\"your_claude_api_key\", \"claude\")                     │\n",
+          "│                                                                       │\n",
+          "│ Or without keyring (less secure):                                     │\n",
           "│ tldr_config(api_key = \"your_claude_api_key\")                          │\n",
           "│                                                                       │\n",
           "│ You can get an API key from: https://console.anthropic.com/           │\n",
@@ -192,8 +195,8 @@ OpenAIProvider <- R6::R6Class("OpenAIProvider",
         "gpt-3.5-turbo"
       )
       
-      # Set API key, model, and performance settings
-      self$api_key <- config$openai_api_key
+      # Try to get API key from keyring, environment variables, or config
+      self$api_key <- get_api_key("openai")
       self$model <- config$openai_model
       
       # Set custom timeout and max_retries if provided
@@ -211,7 +214,10 @@ OpenAIProvider <- R6::R6Class("OpenAIProvider",
           "│                                                                       │\n",
           "│ You need to set up your OpenAI API key before using this provider.    │\n",
           "│                                                                       │\n",
-          "│ To set up your API key, run:                                          │\n",
+          "│ To set up your API key securely, run:                                 │\n",
+          "│ tldr_set_api_key(\"your_openai_api_key\", \"openai\")                     │\n",
+          "│                                                                       │\n",
+          "│ Or without keyring (less secure):                                     │\n",
           "│ tldr_config(openai_api_key = \"your_openai_api_key\")                   │\n",
           "│                                                                       │\n",
           "│ You can get an API key from: https://platform.openai.com/api-keys     │\n",

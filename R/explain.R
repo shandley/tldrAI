@@ -219,12 +219,47 @@ tldr_explain <- function(code, detail_level = "basic", highlight = TRUE, line_by
     # Analyze the environment
     context_analyzer$analyze_environment()
     
-    # Format context data for prompt
-    context_data <- context_analyzer$format_context_for_prompt()
-    
-    # Add understanding of specific variables and functions used in the code
+    # Extract main functions and variables for context
     code_vars <- extract_variables_from_code(code)
     code_funcs <- extract_functions_from_code(code)
+    
+    # Create minimal function metadata for context awareness
+    # This differs from tldr() because we're explaining code, not a specific function
+    dummy_func_name <- "code_block"
+    
+    # Extract potential package names from functions
+    # Look for common packages based on functions found in the code
+    potential_pkg <- NULL
+    if (length(code_funcs) > 0) {
+      dplyr_funcs <- c("filter", "select", "mutate", "summarize", "group_by", "arrange", "join", "bind")
+      tidyr_funcs <- c("pivot_longer", "pivot_wider", "separate", "unite", "nest", "unnest")
+      ggplot_funcs <- c("ggplot", "geom_", "aes", "facet_", "theme", "scale_")
+      
+      # Check for presence of functions from common packages
+      if (any(sapply(dplyr_funcs, function(f) any(grepl(f, code_funcs))))) {
+        potential_pkg <- "dplyr"
+      } else if (any(sapply(tidyr_funcs, function(f) any(grepl(f, code_funcs))))) {
+        potential_pkg <- "tidyr"
+      } else if (any(sapply(ggplot_funcs, function(f) any(grepl(f, code_funcs))))) {
+        potential_pkg <- "ggplot2"
+      } else {
+        potential_pkg <- "base"  # Default to base R
+      }
+    } else {
+      potential_pkg <- "base"  # Default to base R
+    }
+    
+    dummy_func_metadata <- list(
+      name = dummy_func_name,
+      package = potential_pkg,  # Now has a non-NULL package value
+      signature = "",
+      args = list(),  # Add empty args list to avoid issues
+      keywords = code_funcs,  # Use extracted functions as keywords
+      related_vars = code_vars # Use extracted variables as related vars
+    )
+    
+    # Format context data for prompt
+    context_data <- context_analyzer$format_context_for_prompt(dummy_func_name, dummy_func_metadata)
     
     if (length(code_vars) > 0 || length(code_funcs) > 0) {
       context_data <- paste0(
@@ -498,6 +533,12 @@ print_explanation_response <- function(response, code, detail_level, highlight, 
   if (grepl("## Key Concepts", content, fixed = TRUE)) {
     # Fix potential issues with NA values in key concepts section
     content <- gsub("(- [^:]+:[^\\n]+): NA", "\\1", content)
+    # More aggressive NA removal for lines ending with NA
+    content <- gsub("(- [^:]+:.+?): NA(\\s*$)", "\\1\\2", content)
+    # Also handle NA that may appear after a period
+    content <- gsub("(- [^:]+:.+?\\.) NA(\\s*$)", "\\1\\2", content)
+    # Handle the case where NA appears at the end of any line in the Key Concepts section
+    content <- gsub("(- .+?) NA(\\s*$)", "\\1\\2", content)
   }
   
   # Format the content

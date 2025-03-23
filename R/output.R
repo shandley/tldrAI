@@ -245,21 +245,21 @@ format_content <- function(content) {
     else if (grepl("^-\\s+", line)) {
       # Extract the bullet point text
       bullet_text <- gsub("^-\\s+", "", line)
+      
+      # Remove any trailing NA that might have been added
+      bullet_text <- gsub("\\s+NA\\s*$", "", bullet_text)
+      
       # Split by colon if present and handle explanation bullet points differently
       if (grepl(":", bullet_text)) {
-        # Special handling for key concepts and similar sections with explanations after colons
-        if (grepl("^[^:]+:.*\\.$", bullet_text)) {
-          # This is a bullet with an explanation that ends with a period - keep all content
-          parts <- strsplit(bullet_text, ":\\s*", 2)[[1]]
-          if (length(parts) == 2) {
-            formatted_lines[i] <- paste0("- ", cli::col_green(parts[1]), ": ", parts[2])
-          } else {
-            formatted_lines[i] <- paste0("- ", bullet_text)
-          }
-        } else {
-          # Normal key-value pair handling
-          parts <- strsplit(bullet_text, ":\\s*", 2)[[1]]
+        # Split the text for key-value formatting
+        parts <- strsplit(bullet_text, ":\\s*", 2)[[1]]
+        
+        if (length(parts) == 2) {
+          # Clean any trailing NA from the second part too
+          parts[2] <- gsub("\\s+NA\\s*$", "", parts[2])
           formatted_lines[i] <- paste0("- ", cli::col_green(parts[1]), ": ", parts[2])
+        } else {
+          formatted_lines[i] <- paste0("- ", bullet_text)
         }
       } else {
         formatted_lines[i] <- paste0("- ", bullet_text)
