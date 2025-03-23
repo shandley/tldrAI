@@ -16,6 +16,9 @@
 - [Performance Features](#performance-features)
   - [Asynchronous API Calls](#asynchronous-api-calls)
   - [Performance Tuning](#performance-tuning)
+- [Code Explanation](#code-explanation)
+  - [Detail Levels](#detail-levels)
+  - [Explanation Options](#explanation-options)
 - [Character Voices](#character-voices)
   - [Available Character Voices](#available-character-voices)
 - [Support the Project](#support-the-project)
@@ -36,6 +39,7 @@
 
 - **Concise Help**: Get straight-to-the-point explanations focused on practical usage
 - **Examples-First**: Prioritizes realistic code examples over verbose documentation
+- **Code Explanation**: Analyze and explain R code at different levels of detail
 - **Contextual Awareness**: Provides personalized help based on your actual data and code
 - **Character Voices**: Add personality to responses with customizable character voices
 - **Multiple LLM Providers**: Support for both Claude and OpenAI APIs
@@ -111,6 +115,31 @@ tldr_test_connection("claude")
 
 # Open the GitHub repository in your browser
 tldr_open_repo()
+
+# Explain R code
+code <- 'mtcars %>%
+  filter(mpg > 20) %>%
+  group_by(cyl) %>%
+  summarize(avg_mpg = mean(mpg))'
+tldr_explain(code)
+
+# Different detail levels
+tldr_explain(code, detail_level = "advanced")
+
+# Explain a file
+tldr_explain("path/to/script.R")
+
+# Line-by-line explanation
+tldr_explain(code, line_by_line = TRUE)
+
+# Explain specific lines
+tldr_explain(code, specific_lines = "2-3")
+
+# Use context awareness
+tldr_explain(code, context_aware = TRUE)
+
+# Apply a character voice
+tldr_explain(code, voice = "wise_mentor")
 ```
 
 ## Configuration
@@ -285,6 +314,58 @@ tldr_config(timeout = 120)  # 2 minutes
 
 # Increase retry attempts for unreliable networks
 tldr_config(max_retries = 5)
+```
+
+## Code Explanation
+
+`tldrAI` can analyze and explain R code with the `tldr_explain()` function:
+
+```r
+# Explain code entered as a string
+code <- 'mtcars %>%
+  filter(mpg > 20) %>%
+  group_by(cyl) %>%
+  summarize(avg_mpg = mean(mpg))'
+tldr_explain(code)
+
+# Explain code from a file
+tldr_explain("path/to/script.R")
+```
+
+### Detail Levels
+
+You can control the depth of explanation with the `detail_level` parameter:
+
+```r
+# Basic explanation - suitable for beginners
+tldr_explain(code, detail_level = "basic")
+
+# Intermediate explanation - more technical details
+tldr_explain(code, detail_level = "intermediate")
+
+# Advanced explanation - in-depth technical analysis
+tldr_explain(code, detail_level = "advanced")
+```
+
+### Explanation Options
+
+Customize your explanation with various options:
+
+```r
+# Line-by-line explanation
+tldr_explain(code, line_by_line = TRUE)
+
+# Focus on specific lines only
+tldr_explain(code, specific_lines = "2-3")
+
+# Include syntax highlighting
+tldr_explain(code, highlight = TRUE)
+
+# Use context awareness for more relevant explanations
+tldr_explain(code, context_aware = TRUE)
+
+# Apply a character voice
+tldr_explain(code, voice = "wise_mentor")
 ```
 
 ## Character Voices
