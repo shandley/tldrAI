@@ -1,41 +1,50 @@
-#' Package startup functions
-#' 
+#' Package initialization
+#'
 #' @importFrom utils packageVersion
-#' @importFrom utils browseURL
-NULL
-
+#'
+#' @keywords internal
 .onAttach <- function(libname, pkgname) {
-  pkg_version <- utils::packageVersion("tldrAI")
-  
-  startup_msg <- paste0(
-    cli::col_cyan("── tldrAI "), cli::col_silver(pkg_version), cli::col_cyan(" ──"), "\n",
-    "Welcome to ", cli::col_green("tldrAI"), "! Get AI-powered quick reference for R functions.\n",
-    "• Use ", cli::col_yellow("tldr(\"function_name\")"), " to get concise help for a function\n",
-    "• Try character voices with ", cli::col_yellow("tldr(\"mean\", voice = \"theatrical_villain\")"), "\n",
-    "• See all available voices with ", cli::col_yellow("tldr_list_voices()"), "\n",
-    "• Configure API keys with ", cli::col_yellow("tldr_config()"), "\n",
-    "• View the GitHub repo with ", cli::col_yellow("tldr_open_repo()"), "\n",
-    "\nIf you find tldrAI helpful, please consider starring the GitHub repository!\n",
-    "For more information, see ", cli::col_blue("help(package = \"tldrAI\")")
+  # Display welcome message
+  version <- utils::packageVersion("tldrAI")
+  packageStartupMessage(
+    cli::col_cyan("\u2500\u2500 tldrAI ", version, " \u2500\u2500\n"),
+    "Welcome to tldrAI! Get AI-powered quick reference for R functions.\n",
+    cli::col_green("• "), "Use tldr(\"function_name\") to get concise help for a function\n",
+    cli::col_green("• "), "Try character voices with tldr(\"mean\", voice = \"theatrical_villain\")\n",
+    cli::col_green("• "), "See all available voices with tldr_list_voices()\n",
+    cli::col_green("• "), "Store API keys securely with tldr_set_api_key()\n",
+    cli::col_green("• "), "View the GitHub repo with tldr_open_repo()\n",
+    "\nIf you find tldrAI helpful, please consider starring the GitHub repository!",
+    "\nFor more information, see help(package = \"tldrAI\")"
   )
   
-  packageStartupMessage(startup_msg)
+  # Check if keyring is available
+  if (requireNamespace("keyring", quietly = TRUE)) {
+    # Check if we should migrate any keys
+    # We only do this in interactive sessions to avoid prompting in scripts
+    if (interactive()) {
+      tryCatch({
+        config <- get_config_all()
+        if (is.list(config) && 
+            ((length(config$api_key) > 0 && nchar(config$api_key) > 0) || 
+             (length(config$openai_api_key) > 0 && nchar(config$openai_api_key) > 0))) {
+          packageStartupMessage(
+            "\nNOTE: API keys found in configuration file that could be stored more securely.",
+            "\nRun tldr_key_migrate() to move keys to your system's secure keyring."
+          )
+        }
+      }, error = function(e) {
+        # Continue on error - don't bother user with errors on startup
+      })
+    }
+  }
 }
 
-#' Open the tldrAI GitHub repository in a web browser
+#' .onLoad hook
 #'
-#' This function opens the tldrAI GitHub repository in your default web browser.
-#' If you find the package useful, please consider starring the repository!
+#' Functions to run when package is loaded
 #'
-#' @return Opens a browser window/tab pointing to the tldrAI GitHub repository
-#' @export
-#'
-#' @examples
-#' \dontrun{
-#' tldr_open_repo()
-#' }
-tldr_open_repo <- function() {
-  repo_url <- "https://github.com/shandley/tldrAI"
-  message("Opening ", repo_url, " in your browser")
-  utils::browseURL(repo_url)
+#' @keywords internal
+.onLoad <- function(libname, pkgname) {
+  # Nothing to do here for now
 }

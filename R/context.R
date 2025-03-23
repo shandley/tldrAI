@@ -222,11 +222,19 @@ ContextAnalyzer <- R6::R6Class("ContextAnalyzer",
       scores <- numeric(length(self$context_data$data_frames))
       names(scores) <- names(self$context_data$data_frames)
       
-      # Extract package info
-      func_package <- func_metadata$package
+      # Extract package info (with safe fallback)
+      func_package <- if (!is.null(func_metadata) && !is.null(func_metadata$package)) {
+        func_metadata$package
+      } else {
+        "base"  # Default to base R if package info is missing
+      }
       
-      # Get function arguments
-      func_args <- func_metadata$args
+      # Get function arguments (with safe fallback)
+      func_args <- if (!is.null(func_metadata) && !is.null(func_metadata$args)) {
+        func_metadata$args
+      } else {
+        list()  # Empty list if args are missing
+      }
       
       # Score each data frame based on various relevance signals
       for (df_name in names(self$context_data$data_frames)) {

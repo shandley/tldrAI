@@ -1,0 +1,436 @@
+---
+title: "Script Summarization with tldrAI"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Script Summarization with tldrAI}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+# Introduction
+
+Understanding R scripts—both your own and those written by others—can be challenging. Scripts often contain complex data manipulations, statistical analyses, and visualizations without extensive documentation. The `tldr_summarize()` function in the `tldrAI` package leverages Large Language Models (LLMs) to generate intelligent, human-readable summaries of R scripts.
+
+This vignette explains how to use the `tldr_summarize()` function to analyze R scripts, understand their purpose, structure, and functionality, and even generate visualizations of their components and relationships.
+
+## Key Benefits of Script Summarization
+
+Script summarization with `tldrAI` offers several advantages:
+
+1. **Quick comprehension** of unfamiliar scripts without reading every line
+2. **Identification of key components** like functions, data operations, and workflows
+3. **Visualization options** for understanding dependencies, flow, and structure
+4. **Customizable focus** to highlight specific aspects of the script
+5. **Integration with context** from your current R environment
+6. **Time savings** when onboarding to new projects or revisiting old code
+
+# Basic Usage
+
+## Summarizing a Single Script
+
+The simplest way to use `tldr_summarize()` is to provide the path to an R script:
+
+```{r}
+library(tldrAI)
+
+# Generate a summary of a single script
+summary <- tldr_summarize("path/to/your/script.R")
+
+# The result is displayed in the console by default
+summary
+```
+
+The function analyzes the script and returns a structured summary with sections covering:
+
+- Purpose and overview
+- Key components and functionality
+- Package dependencies
+- Data flow and transformations
+- Execution flow
+
+## Summarizing Multiple Scripts
+
+You can also analyze multiple related scripts at once:
+
+```{r}
+# Analyze multiple scripts together
+summaries <- tldr_summarize(c(
+  "data_prep.R",
+  "analysis.R",
+  "visualization.R"
+))
+```
+
+When multiple scripts are provided, the function analyzes both individual scripts and their relationships, helping you understand how they work together.
+
+# Customizing the Summary
+
+## Focusing on Specific Aspects
+
+The `focus` parameter allows you to emphasize different aspects of the script:
+
+```{r}
+# Focus on function definitions and relationships
+tldr_summarize("utilities.R", focus = "functions")
+
+# Focus on data transformations and flow
+tldr_summarize("data_pipeline.R", focus = "data_flow")
+
+# Focus on package dependencies
+tldr_summarize("analysis.R", focus = "packages")
+
+# Focus on execution workflow
+tldr_summarize("processing.R", focus = "workflow")
+
+# General overview (default)
+tldr_summarize("script.R", focus = "general")
+```
+
+Each focus option tailors the summary to highlight different aspects of the script:
+
+| Focus Option | Emphasizes |
+|-------------|------------|
+| "general" | Overall script purpose and functionality |
+| "functions" | Functions defined, their purposes and relationships |
+| "data_flow" | Data imports, transformations, and outputs |
+| "packages" | Package dependencies and their usage |
+| "workflow" | Execution flow and computational steps |
+
+## Controlling Detail Level
+
+The `detail` parameter lets you control the amount of information included:
+
+```{r}
+# Brief summary with essential information
+tldr_summarize("script.R", detail = "brief")
+
+# Standard detail (default)
+tldr_summarize("script.R", detail = "standard")
+
+# Comprehensive analysis with in-depth information
+tldr_summarize("script.R", detail = "comprehensive")
+```
+
+# Visualizing Script Structure
+
+One of the most powerful features of `tldr_summarize()` is the ability to generate visualizations of the script's structure.
+
+## Enabling Visualizations
+
+To include a visualization with your summary:
+
+```{r}
+# Generate a summary with visualization
+summary_with_vis <- tldr_summarize("script.R", visualize = TRUE)
+
+# The visualization is included in the output
+summary_with_vis
+```
+
+## Visualization Types
+
+The `vis_type` parameter allows you to choose from four different visualization types:
+
+```{r}
+# Function dependency visualization (default)
+tldr_summarize("script.R", visualize = TRUE, vis_type = "dependency")
+
+# Execution flow visualization
+tldr_summarize("script.R", visualize = TRUE, vis_type = "flow")
+
+# Package dependency visualization
+tldr_summarize("script.R", visualize = TRUE, vis_type = "package")
+
+# Script structure visualization
+tldr_summarize("script.R", visualize = TRUE, vis_type = "structure")
+```
+
+### Dependency Visualization
+
+The "dependency" visualization shows how functions within the script(s) depend on each other and on external packages:
+
+```{r}
+# Example of dependency visualization
+dep_viz <- tldr_summarize("analysis.R", 
+                         visualize = TRUE, 
+                         vis_type = "dependency")
+```
+
+This visualization helps you understand:
+- Which functions call which other functions
+- Which packages are used by different functions
+- How complex the function dependencies are
+
+### Flow Visualization
+
+The "flow" visualization represents the execution flow of the script:
+
+```{r}
+# Example of flow visualization
+flow_viz <- tldr_summarize("data_pipeline.R", 
+                          visualize = TRUE, 
+                          vis_type = "flow")
+```
+
+This helps you understand:
+- The overall sequence of operations
+- Major code blocks and their purposes
+- Data input and output points
+
+### Package Visualization
+
+The "package" visualization focuses on package dependencies:
+
+```{r}
+# Example of package visualization
+pkg_viz <- tldr_summarize("analysis.R", 
+                         visualize = TRUE, 
+                         vis_type = "package")
+```
+
+This visualization helps you understand:
+- Which packages the script depends on
+- How packages are grouped by functionality
+- The extent of package usage
+
+### Structure Visualization
+
+The "structure" visualization shows the overall structure of the script:
+
+```{r}
+# Example of structure visualization
+struct_viz <- tldr_summarize("utilities.R", 
+                            visualize = TRUE, 
+                            vis_type = "structure")
+```
+
+This helps you understand:
+- Functions defined in the script
+- Global variables and their relationships
+- Major code sections and their purposes
+
+## Fallback Visualizations
+
+If the required packages for generating graphical visualizations (`DiagrammeR` and/or `visNetwork`) are not available, `tldr_summarize()` will automatically fall back to ASCII-based visualizations that can be displayed in any console.
+
+# Advanced Features
+
+## Context-Aware Summaries
+
+The `tldr_summarize()` function can incorporate context from your current R environment to provide more relevant summaries:
+
+```{r}
+# Load some packages and data
+library(dplyr)
+library(ggplot2)
+data(mtcars)
+
+# Generate a context-aware summary
+tldr_summarize("visualization.R", context = TRUE)
+```
+
+With `context = TRUE`, the summary will consider:
+- Currently loaded packages
+- Available data frames
+- Recent R commands
+- Environment variables
+
+This contextual information helps the summary be more relevant to your current work.
+
+## Character Voices
+
+Like other `tldrAI` functions, `tldr_summarize()` supports character voices to add personality to summaries:
+
+```{r}
+# List available voices
+tldr_list_voices()
+
+# Use a specific voice for the summary
+tldr_summarize("script.R", voice = "professor")
+```
+
+Each voice provides a different style of communication while maintaining accuracy.
+
+## LLM Provider Selection
+
+You can choose which LLM provider to use for generating summaries:
+
+```{r}
+# Use Claude for the summary
+tldr_summarize("script.R", provider = "claude")
+
+# Use OpenAI for the summary
+tldr_summarize("script.R", provider = "openai")
+```
+
+Different providers may have different strengths and capabilities.
+
+## Caching and Refresh
+
+Summaries are cached to improve performance and reduce API calls:
+
+```{r}
+# Use cached result if available (default)
+tldr_summarize("script.R")
+
+# Force a fresh summary
+tldr_summarize("script.R", refresh = TRUE)
+```
+
+Cached results are stored based on the script's content, focus, detail level, and other parameters.
+
+## Output Format
+
+You can control the output format of the summary:
+
+```{r}
+# Console output with colored formatting (default)
+tldr_summarize("script.R", output = "console")
+
+# Markdown output for inclusion in documents
+tldr_summarize("script.R", output = "markdown")
+```
+
+The markdown output is particularly useful for including summaries in R Markdown documents or reports.
+
+# Practical Examples
+
+## Analyzing a Data Preparation Script
+
+```{r}
+# Analysis of a data preparation script
+tldr_summarize("data_prep.R", 
+              focus = "data_flow", 
+              visualize = TRUE, 
+              vis_type = "flow")
+```
+
+This would provide a summary focusing on the data transformations with a flow visualization showing how data moves through the script.
+
+## Understanding a Complex Analysis Script
+
+```{r}
+# Comprehensive analysis of a complex script
+tldr_summarize("statistical_analysis.R", 
+              detail = "comprehensive", 
+              visualize = TRUE, 
+              vis_type = "structure")
+```
+
+This provides an in-depth analysis with a structural visualization to help understand the components.
+
+## Exploring Package Dependencies
+
+```{r}
+# Analysis focusing on package dependencies
+tldr_summarize("visualization_functions.R", 
+              focus = "packages", 
+              visualize = TRUE, 
+              vis_type = "package")
+```
+
+This summary would focus on which packages are used and why, with a visualization of package relationships.
+
+## Documentation Generation
+
+```{r}
+# Generate documentation-style summary
+markdown_summary <- tldr_summarize("helper_functions.R", 
+                                  focus = "functions", 
+                                  detail = "comprehensive", 
+                                  output = "markdown")
+
+# Could be saved to a file
+cat(markdown_summary$summary, file = "helper_functions_documentation.md")
+```
+
+This approach can be used to generate documentation for script libraries.
+
+# Technical Details
+
+## Script Analysis Process
+
+When you call `tldr_summarize()`, the function:
+
+1. Validates input parameters and file paths
+2. Extracts script content and metadata
+3. Analyzes code structure:
+   - Identifies package dependencies (`library()`, `require()`, and namespace (`::`) calls)
+   - Detects function definitions and relationships
+   - Identifies variables and data operations
+   - Analyzes code blocks and execution flow
+4. Constructs an appropriate prompt for the LLM
+5. Sends the prompt to the selected LLM provider
+6. Processes the response into a structured summary
+7. Generates visualizations if requested
+8. Returns and displays the results
+
+## Return Value
+
+The function returns a list containing:
+
+```{r}
+result <- tldr_summarize("script.R", visualize = TRUE)
+
+# Components of the return value
+names(result)
+# [1] "summary"      "files"        "focus"        "provider"     "visualization"
+```
+
+- `summary`: The text summary (formatted according to the `output` parameter)
+- `files`: The file paths that were analyzed
+- `focus`: The focus used for the summary
+- `provider`: The LLM provider that generated the summary
+- `visualization`: The visualization object (if requested)
+
+# Integration with Other tldrAI Features
+
+## Using with tldr()
+
+The script summarization feature complements the core `tldr()` function:
+
+```{r}
+# Get help with a specific R function
+tldr("ggplot2::geom_boxplot")
+
+# Summarize a script that uses this function
+tldr_summarize("visualization.R")
+```
+
+While `tldr()` helps you understand specific R functions, `tldr_summarize()` helps you understand entire scripts and their structure.
+
+## Using with Other tldrAI Functions
+
+```{r}
+# Generate code examples
+tldr_example("how to create a boxplot faceted by two variables")
+
+# Summarize the resulting script
+tldr_summarize("boxplot_script.R")
+```
+
+This workflow can help you understand generated code or examples.
+
+# Conclusion
+
+The `tldr_summarize()` function provides a powerful way to quickly understand R scripts using AI-generated summaries and visualizations. By leveraging Large Language Models, it can identify the purpose, structure, and functionality of scripts without requiring you to read and analyze every line of code.
+
+Whether you're exploring a new codebase, trying to understand old scripts, or documenting your work, `tldr_summarize()` can save you time and provide valuable insights into R code.
+
+We recommend using this feature when:
+
+- Onboarding to new projects with existing R code
+- Revisiting old scripts you haven't worked with recently
+- Trying to understand scripts written by colleagues
+- Documenting your own scripts for future reference
+- Teaching or explaining R code to others
+
+The ability to focus on specific aspects of scripts and generate visualizations makes `tldr_summarize()` a versatile tool for R code comprehension and documentation.

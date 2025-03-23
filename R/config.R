@@ -20,6 +20,9 @@
 #'   \item{openai_model}{Character string specifying which OpenAI model to use.
 #'        Options: "gpt-4o" (latest), "gpt-4-turbo" (default), "gpt-4" (legacy),
 #'        or "gpt-3.5-turbo" (faster, less capable).}
+#'   \item{use_keyring}{Logical indicating whether to use the system keyring for API key storage.
+#'        Default: TRUE. When TRUE, API keys are stored in the secure system keyring if the
+#'        keyring package is available. Use \code{\link{tldr_set_api_key}} for better control.}
 #' }
 #'
 #' @section Caching Settings:
@@ -91,6 +94,7 @@
 #' tldr_config(provider = "claude")  # Use Claude as default provider
 #' tldr_config(model = "claude-3-sonnet-20240229")  # Use a different Claude model
 #' tldr_config(openai_model = "gpt-4o")  # Use a different OpenAI model
+#' tldr_config(use_keyring = TRUE)  # Enable secure keyring storage for API keys
 #' 
 #' # Fallback Configuration
 #' tldr_config(enable_fallback = TRUE, fallback_provider = "openai")  # Auto-fallback to OpenAI
@@ -131,13 +135,32 @@ tldr_config <- function(api_key = NULL, openai_api_key = NULL,
                        verbose_default = NULL, examples_default = NULL, character_voice = NULL,
                        show_progress = NULL, debug_mode = NULL, async_mode = NULL,
                        timeout = NULL, max_retries = NULL, visualize = NULL,
-                       visualization_type = NULL) {
+                       visualization_type = NULL, use_keyring = NULL) {
   
   config <- get_config_all()
   
   # Update config with non-NULL values
-  if (!is.null(api_key)) config$api_key <- api_key
-  if (!is.null(openai_api_key)) config$openai_api_key <- openai_api_key
+  if (!is.null(api_key)) {
+    # Check if we should store the key in keyring
+    if (requireNamespace("keyring", quietly = TRUE) && 
+        get_config("use_keyring", default = TRUE)) {
+      tldr_set_api_key(api_key, "claude", update_config = TRUE)
+      message("Claude API key stored securely in system keyring.")
+    } else {
+      config$api_key <- api_key
+    }
+  }
+  
+  if (!is.null(openai_api_key)) {
+    # Check if we should store the key in keyring
+    if (requireNamespace("keyring", quietly = TRUE) && 
+        get_config("use_keyring", default = TRUE)) {
+      tldr_set_api_key(openai_api_key, "openai", update_config = TRUE)
+      message("OpenAI API key stored securely in system keyring.")
+    } else {
+      config$openai_api_key <- openai_api_key
+    }
+  }
   if (!is.null(provider)) {
     if (!provider %in% c("claude", "openai")) {
       stop(
@@ -247,6 +270,28 @@ tldr_config <- function(api_key = NULL, openai_api_key = NULL,
     config$max_retries <- as.integer(max_retries)
   }
   
+  # Handle use_keyring option
+  if (!is.null(use_keyring)) {
+    if (!is.logical(use_keyring)) {
+      stop("use_keyring must be a logical value (TRUE or FALSE)")
+    }
+    
+    if (use_keyring && !requireNamespace("keyring", quietly = TRUE)) {
+      warning("The keyring package is not installed. Install it with: install.packages(\"keyring\")")
+      config$use_keyring <- FALSE
+    } else {
+      config$use_keyring <- use_keyring
+      
+      # If enabling keyring, suggest migrating existing keys
+      if (use_keyring && requireNamespace("keyring", quietly = TRUE) &&
+          ((!is.null(config$api_key) && nchar(config$api_key) > 0) ||
+           (!is.null(config$openai_api_key) && nchar(config$openai_api_key) > 0))) {
+        message("You have API keys stored in configuration that could be moved to keyring.")
+        message("Run tldr_key_migrate() to securely store your existing API keys.")
+      }
+    }
+  }
+  
   # Save the updated config
   save_config(config)
   
@@ -283,6 +328,9 @@ get_config_all <- function() {
       # API keys
       api_key = Sys.getenv("CLAUDE_API_KEY", ""),
       openai_api_key = Sys.getenv("OPENAI_API_KEY", ""),
+      
+      # Security settings
+      use_keyring = TRUE,  # Use keyring for API key storage if available
       
       # Provider settings
       provider = "claude",

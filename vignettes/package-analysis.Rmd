@@ -1,0 +1,235 @@
+---
+title: "Package Analysis with tldrAI"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Package Analysis with tldrAI}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+# Introduction
+
+R has thousands of packages available on CRAN and other repositories, each with its own set of functions, datasets, and workflows. Learning a new package can be time-consuming, requiring you to read documentation, browse vignettes, and piece together how different functions work together.
+
+The `tldr_package()` function in the `tldrAI` package solves this problem by providing AI-powered package analysis that quickly gets you up to speed with any R package. Rather than spending hours exploring package documentation, you can get a comprehensive overview in seconds.
+
+This vignette explains how to use the package analysis capabilities of `tldrAI` to understand and work with R packages more efficiently.
+
+## Why AI-Powered Package Analysis?
+
+Traditional package documentation provides detailed information but often lacks:
+
+1. **Clear organization** by task or workflow
+2. **Relationships between functions** and how they work together
+3. **Practical workflow examples** that combine multiple functions
+4. **Function categorization** by purpose
+5. **Concise overviews** that focus on the most important features
+
+The `tldr_package()` function addresses these limitations by leveraging Large Language Models (LLMs) to analyze package structure, functions, datasets, and documentation, then synthesize this information into a clear, practical overview.
+
+# Basic Usage
+
+## Analyzing a Package
+
+The most straightforward way to use `tldr_package()` is to provide a package name:
+
+```{r}
+library(tldrAI)
+
+# Analyze the dplyr package
+tldr_package("dplyr")
+```
+
+This will generate a comprehensive overview of the package, including its purpose, key functions, installation instructions, usage examples, and best practices.
+
+## Package Must Be Installed
+
+For best results, the package should be installed on your system. If it's not installed, `tldr_package()` will provide information about what the package likely does and installation instructions:
+
+```{r}
+# For a package that's not installed
+tldr_package("packageNotInstalled")
+```
+
+# Customizing Package Analysis
+
+## Focusing on Specific Aspects
+
+You can focus the analysis on specific aspects of a package using the `focus` parameter:
+
+```{r}
+# Focus on functions
+tldr_package("ggplot2", focus = "functions")
+
+# Focus on datasets
+tldr_package("datasets", focus = "datasets")
+
+# Focus on vignettes
+tldr_package("knitr", focus = "vignettes")
+
+# Focus on dependencies
+tldr_package("tidyr", focus = "dependencies")
+```
+
+The available focus options are:
+
+- `"overview"`: General package purpose and key functions (default)
+- `"functions"`: Detailed exploration of all exported functions
+- `"datasets"`: Description of included datasets
+- `"vignettes"`: Summary of package vignettes
+- `"dependencies"`: Analysis of package dependencies and their purposes
+
+## Adjusting Detail Level
+
+Control the amount of detail in the analysis with the `detail` parameter:
+
+```{r}
+# Brief overview
+tldr_package("lubridate", detail = "brief")
+
+# Standard overview (default)
+tldr_package("purrr", detail = "standard")
+
+# Comprehensive analysis
+tldr_package("dplyr", detail = "comprehensive")
+```
+
+The available detail levels are:
+
+- `"brief"`: Quick overview with key functions only
+- `"standard"`: Balanced detail with main function categories (default)
+- `"comprehensive"`: Full details on all exported functions and features
+
+## Workflow Examples
+
+You can request more workflow examples to understand how to use the package in practice:
+
+```{r}
+# Request 5 workflow examples
+tldr_package("tidyr", examples = 5)
+```
+
+## Function Categorization
+
+By default, functions are grouped by purpose (data manipulation, visualization, etc.). You can disable this behavior if you prefer a flat list:
+
+```{r}
+# Disable function categorization
+tldr_package("dplyr", categories = FALSE)
+```
+
+# Interactive Mode
+
+The `interactive` parameter creates a simple console-based explorer that allows you to navigate through different sections of the package analysis:
+
+```{r}
+# Interactive exploration
+tldr_package("shiny", interactive = TRUE)
+```
+
+In interactive mode, you can:
+
+- Use arrow keys or numbers to navigate between sections
+- Press Enter to view a selected section
+- Press 'q' to quit and return to the R console
+
+This mode is particularly useful for larger packages with many functions, where the full analysis might be overwhelming in a single view.
+
+# Output Formats
+
+You can control the output format using the `output` parameter:
+
+```{r}
+# Default console output with formatting
+tldr_package("readr")
+
+# Raw markdown output
+tldr_package("readr", output = "markdown")
+
+# HTML output (requires rmarkdown package)
+tldr_package("readr", output = "html")
+```
+
+The available output formats are:
+
+- `"console"`: Formatted console output (default)
+- `"markdown"`: Raw markdown text
+- `"html"`: HTML format (requires rmarkdown package)
+
+The HTML output is particularly useful for sharing package analyses with others or including them in reports and presentations.
+
+# Provider and Voice Options
+
+Like other `tldrAI` functions, you can use different LLM providers and character voices:
+
+```{r}
+# Using a specific voice
+tldr_package("tibble", voice = "enthusiastic_explorer")
+
+# Using a specific provider
+tldr_package("stringr", provider = "openai")
+```
+
+# Example: Learning the dplyr Package
+
+Here's a practical example of how `tldr_package()` can help you learn the popular dplyr package:
+
+```{r}
+# Get a comprehensive overview of dplyr
+tldr_package("dplyr", detail = "comprehensive", examples = 3)
+```
+
+This will provide:
+
+1. A clear explanation of dplyr's purpose in the tidyverse ecosystem
+2. Key functions grouped by tasks like filtering, summarizing, and joining
+3. Multiple workflow examples showing how to chain operations with the pipe operator
+4. Best practices for efficient data manipulation
+5. Common patterns and anti-patterns
+
+# Integration with Other tldrAI Features
+
+The `tldr_package()` function is designed to work seamlessly with other tldrAI features:
+
+```{r}
+# First get an overview of the package
+tldr_package("ggplot2")
+
+# Then explore a specific function
+tldr("ggplot2::ggplot")
+
+# Analyze error messages related to the package
+# This will error
+ggplot(mtcars)
+# Then analyze the error
+tldr_error(auto_capture = TRUE)
+
+# Explain code using this package
+code <- "
+ggplot(mtcars, aes(x = wt, y = mpg)) +
+  geom_point() +
+  geom_smooth(method = 'lm')
+"
+tldr_explain(code)
+```
+
+# Conclusion
+
+The `tldr_package()` function transforms how you learn and use R packages by providing clear, practical overviews that focus on what matters most. It helps you:
+
+- Quickly understand a package's purpose and capabilities
+- Identify the most important functions and how they relate
+- Learn from practical workflow examples
+- Navigate through even the most complex packages
+
+By making package documentation more accessible and user-friendly, `tldr_package()` helps you become more productive with new packages in minutes rather than hours or days.
+
+Next time you're learning a new package or need a refresher on one you haven't used in a while, try `tldr_package()` to get up to speed quickly.

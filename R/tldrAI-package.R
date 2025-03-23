@@ -24,6 +24,11 @@
 #'
 #' \preformatted{
 #' library(tldrAI)
+#' # Secure storage (recommended)
+#' tldr_set_api_key("your_claude_api_key", "claude")  # For Claude
+#' tldr_set_api_key("your_openai_api_key", "openai")  # For OpenAI
+#'
+#' # Or using configuration file
 #' tldr_config(api_key = "your_claude_api_key")  # For Claude
 #' tldr_config(openai_api_key = "your_openai_api_key")  # For OpenAI
 #' }
@@ -36,10 +41,38 @@
 #' tldr("ggplot", visualize = TRUE)  # With visualization
 #' }
 #'
+#' @section Secure API Key Management:
+#' tldrAI offers secure API key storage using your system's credential store:
+#'
+#' \itemize{
+#'   \item \strong{Secure Storage}: Store API keys in your system's secure keyring
+#'   \item \strong{Automatic Migration}: Easily move existing keys to secure storage
+#'   \item \strong{Flexible Fallbacks}: Use environment variables in CI/CD environments
+#' }
+#'
+#' To store your API keys securely:
+#'
+#' \preformatted{
+#' # Store API keys securely
+#' tldr_set_api_key("your_claude_api_key", "claude")
+#' tldr_set_api_key("your_openai_api_key", "openai")
+#'
+#' # Check if keys are available
+#' tldr_has_api_key("claude")
+#'
+#' # Remove a key when no longer needed
+#' tldr_clear_api_key("openai")
+#'
+#' # Migrate existing keys to keyring
+#' tldr_key_migrate()
+#' }
+#'
 #' @seealso
 #' \code{\link{tldr}} for getting AI-powered help
 #' \code{\link{tldr_config}} for configuration options
 #' \code{\link{tldr_context_config}} for contextual awareness settings
+#' \code{\link{tldr_set_api_key}} for secure API key storage
+#' \code{\link{tldr_key_migrate}} for migrating keys to secure storage
 #'
 #' @docType package
 #' @name tldrAI
