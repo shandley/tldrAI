@@ -1,0 +1,207 @@
+/* tldrAI Multimodal Interface Styles */
+
+/* Container */
+.tldrAI-multimodal-container {
+  font-family: 'Arial', sans-serif;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Header */
+.tldrAI-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 20px;
+  background-color: #4285F4;
+  color: white;
+  font-weight: bold;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Text panel */
+.tldrAI-text-panel {
+  overflow-y: auto;
+  background-color: white;
+}
+
+.tldrAI-text-panel h1 {
+  font-size: 1.5em;
+  color: #4285F4;
+  margin: 15px 0 10px 0;
+}
+
+.tldrAI-text-panel h2 {
+  font-size: 1.3em;
+  color: #34A853;
+  margin: 12px 0 8px 0;
+}
+
+.tldrAI-text-panel code {
+  background-color: #F5F7F9;
+  color: #24292E;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.tldrAI-text-panel pre {
+  background-color: #F5F7F9;
+  padding: 10px;
+  border-radius: 4px;
+  overflow-x: auto;
+  margin: 10px 0;
+}
+
+/* Visualization panel */
+.tldrAI-viz-panel {
+  display: flex;
+  flex-direction: column;
+  background-color: #FAFAFA;
+}
+
+/* Tabs */
+.tldrAI-tabs {
+  display: flex;
+  background-color: #F5F5F5;
+  border-bottom: 1px solid #DDDDDD;
+}
+
+.tldrAI-tab {
+  padding: 10px 15px;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all 0.3s ease;
+}
+
+.tldrAI-tab:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.tldrAI-tab-active {
+  border-bottom: 3px solid #FBBC05 !important;
+  font-weight: bold;
+}
+
+/* Tab panels */
+.tldrAI-tab-panel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  padding: 15px;
+}
+
+/* Loading animation */
+.tldrAI-loading {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.tldrAI-loading div {
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #4285F4;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  animation: spin 2s linear infinite;
+}
+
+/* Error messages */
+.tldrAI-error {
+  color: #D32F2F;
+  text-align: center;
+  padding: 20px;
+}
+
+/* Data tables */
+.tldrAI-data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  border: 1px solid #DADCE0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.tldrAI-data-table thead {
+  background-color: #F1F3F4;
+}
+
+.tldrAI-data-table th {
+  padding: 8px 12px;
+  text-align: left;
+  font-weight: bold;
+  border-bottom: 2px solid #DADCE0;
+}
+
+.tldrAI-data-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #DADCE0;
+}
+
+.tldrAI-data-table tr.highlighted {
+  background-color: #FFF0E0;
+  font-weight: bold;
+}
+
+/* Function diagram customizations */
+.function-diagram .node rect {
+  stroke: #4285F4;
+  fill: #E8F0FE;
+  stroke-width: 2px;
+}
+
+.function-diagram .edgePath path {
+  stroke: #4285F4;
+  stroke-width: 2px;
+}
+
+/* Dark mode overrides - applied when container has 'dark-theme' class */
+.dark-theme {
+  background-color: #1E1E1E;
+  color: #E8E8E8;
+}
+
+.dark-theme .tldrAI-text-panel {
+  background-color: #1E1E1E;
+}
+
+.dark-theme .tldrAI-tabs {
+  background-color: #2D2D2D;
+  border-bottom: 1px solid #444444;
+}
+
+.dark-theme .tldrAI-text-panel code,
+.dark-theme .tldrAI-text-panel pre {
+  background-color: #2D2D30;
+  color: #D4D4D4;
+}
+
+.dark-theme .tldrAI-data-table {
+  border-color: #444444;
+}
+
+.dark-theme .tldrAI-data-table thead {
+  background-color: #2D2D2D;
+}
+
+.dark-theme .tldrAI-data-table th,
+.dark-theme .tldrAI-data-table td {
+  border-color: #444444;
+}
+
+.dark-theme .tldrAI-data-table tr.highlighted {
+  background-color: #3E3D3D;
+}

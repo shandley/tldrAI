@@ -7,15 +7,19 @@
 #' @param provider The LLM provider that generated the response
 #' @param voice The character voice used (if any)
 #' @param visualization Visualization handler object or NULL
+#' @param multimodal Whether to use the multimodal visualization interface
+#' @param theme Theme for multimodal interface ("light" or "dark")
 #'
 #' @return Invisibly returns NULL
 #' @keywords internal
 print_tldr_response <- function(response, func_name, verbose, examples, 
-                               provider = NULL, voice = NULL, visualization = NULL) {
+                               provider = NULL, voice = NULL, visualization = NULL,
+                               multimodal = FALSE, theme = "light") {
   if (get_config("debug_mode", default = FALSE)) {
     message("DEBUG: Printing response for function: ", func_name)
     message("DEBUG: Raw response length: ", nchar(response))
     message("DEBUG: Visualization provided: ", !is.null(visualization))
+    message("DEBUG: Multimodal mode: ", multimodal)
   }
   
   # Extract the code block content
@@ -25,6 +29,41 @@ print_tldr_response <- function(response, func_name, verbose, examples,
     message("DEBUG: Extracted content length: ", nchar(content))
   }
   
+  # Get function metadata
+  pkg <- NULL
+  if (grepl("::", func_name, fixed = TRUE)) {
+    parts <- strsplit(func_name, "::", fixed = TRUE)[[1]]
+    pkg <- parts[1]
+    func_name_only <- parts[2]
+  } else {
+    func_name_only <- func_name
+  }
+  
+  metadata <- get_function_metadata(func_name_only, pkg)
+  
+  # Use multimodal interface if requested and packages are available
+  if (multimodal && requireNamespace("htmlwidgets", quietly = TRUE) && 
+      requireNamespace("htmltools", quietly = TRUE)) {
+    # Determine available visualization types
+    vis_types <- c("diagram", "data_flow", "function_network", "code_highlight")
+    
+    # Create multimodal interface
+    interface <- tldr_multimodal(
+      func_name = func_name, 
+      metadata = metadata,
+      response_text = content,
+      theme = theme,
+      visualization_types = vis_types
+    )
+    
+    # Display the interface
+    print(interface)
+    
+    # Skip the traditional output format
+    return(invisible(NULL))
+  }
+  
+  # Traditional console output format
   # Use cli to format the output nicely
   cat("\n")
   cli::cli_h1(paste0("tldrAI: ", func_name))

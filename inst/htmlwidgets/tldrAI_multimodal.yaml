@@ -1,0 +1,6 @@
+dependencies:
+  - name: tldrAI-multimodal
+    version: 0.1.0
+    src: htmlwidgets
+    stylesheet: tldrAI-multimodal.css
+    script: tldrAI-multimodal.js
