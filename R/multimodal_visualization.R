@@ -117,10 +117,11 @@ create_multimodal_interface <- function(
   widget <- htmlwidgets::createWidget(
     name = "tldrAI_multimodal",
     x = list(
-      interface = as.character(interface),
+      interface = htmltools::doRenderTags(interface),
       tabs = visualization_types,
       func_name = func_name,
-      metadata = metadata
+      metadata = metadata,
+      theme = theme
     ),
     width = width,
     height = height,
@@ -151,17 +152,34 @@ format_response_text <- function(response_text, colors) {
     return(response_text)
   }
   
+  # Create a div for the formatted content
+  formatted_div <- htmltools::div(
+    style = "font-family: Arial, sans-serif; padding: 0 5px;"
+  )
+  
   # Extract code blocks
   content <- extract_code_block(response_text)
   
   # Split the content by lines
   lines <- strsplit(content, "\n")[[1]]
   
-  # Process each line to create HTML elements
+  # Convert markdown to HTML directly
+  if (requireNamespace("markdown", quietly = TRUE)) {
+    try({
+      html_content <- markdown::markdownToHTML(
+        text = content,
+        fragment.only = TRUE,
+        options = c("use_xhtml")
+      )
+      formatted_div$children <- list(htmltools::HTML(html_content))
+      return(formatted_div)
+    }, silent = TRUE)
+  }
+  
+  # Fallback: Process each line to create HTML elements
   html_elements <- list()
   in_code_block <- FALSE
   code_buffer <- character(0)
-  current_list <- NULL
   
   for (i in seq_along(lines)) {
     line <- lines[i]
@@ -278,7 +296,8 @@ format_response_text <- function(response_text, colors) {
     ))
   }
   
-  return(htmltools::tagList(html_elements))
+  formatted_div$children <- html_elements
+  return(formatted_div)
 }
 
 #' Create tab buttons for the visualization panel
