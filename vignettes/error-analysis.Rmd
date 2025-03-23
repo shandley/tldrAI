@@ -1,0 +1,292 @@
+---
+title: "Error Analysis with tldrAI"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Error Analysis with tldrAI}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+# Introduction
+
+R error messages can often be cryptic and difficult to understand, especially for beginners or when working with complex packages. The `tldr_error()` function in the `tldrAI` package solves this problem by providing AI-powered explanations of error messages, practical suggestions for fixing them, and working code examples.
+
+This vignette explains how to use the error analysis capabilities of `tldrAI` to quickly understand and resolve R errors.
+
+## Why AI-Powered Error Analysis?
+
+Traditional error messages in R provide information about what went wrong, but often lack:
+
+1. **Clear explanations** in user-friendly language
+2. **Context-aware solutions** that consider your specific environment
+3. **Working examples** that demonstrate how to fix the issue
+4. **Educational insights** that help you avoid similar errors in the future
+
+The `tldr_error()` function addresses these limitations by leveraging Large Language Models (LLMs) to provide comprehensive, human-readable error analysis.
+
+# Basic Usage
+
+## Analyzing a Simple Error Message
+
+The most straightforward way to use `tldr_error()` is to provide an error message as a string:
+
+```{r}
+library(tldrAI)
+
+# Analyze a simple error message
+tldr_error("Error in mean(x) : object 'x' not found")
+```
+
+This will generate a comprehensive explanation of what the error means, why it occurred, and how to fix it.
+
+## Analyzing an Error Object
+
+You can also analyze error objects directly from `tryCatch()`:
+
+```{r}
+# Use with tryCatch to analyze errors in real-time
+result <- tryCatch(
+  {
+    # Code that might cause an error
+    mean(nonexistent_variable)
+  },
+  error = function(e) {
+    # Analyze the error
+    tldr_error(e)
+    
+    # Return NULL or some default value
+    NULL
+  }
+)
+```
+
+## Automatically Capturing the Last Error
+
+If you've just encountered an error in your R session, you can analyze it without having to retype it:
+
+```{r}
+# This will cause an error
+mean(nonexistent_variable)
+
+# Analyze the error that just occurred
+tldr_error(auto_capture = TRUE)
+```
+
+# Customizing Error Analysis
+
+## Including Code Context
+
+For the most accurate analysis, you can provide the code that caused the error:
+
+```{r}
+# Provide both the error and the code
+tldr_error(
+  "Error: could not find function '%>%'",
+  code = "data %>% filter(x > 5)"
+)
+```
+
+This helps the AI understand exactly what you were trying to do, so it can provide more targeted advice.
+
+## Adjusting Detail Level
+
+You can control the level of detail in the recommendations and the number of examples:
+
+```{r}
+# Get more examples
+tldr_error(
+  "Error in library(nonexistent) : there is no package called 'nonexistent'",
+  examples = 3
+)
+
+# Disable recommendations
+tldr_error(
+  "Error in read.csv(file) : object 'file' not found",
+  recommend = FALSE
+)
+```
+
+## Using Character Voices
+
+Like other `tldrAI` functions, you can apply character voices to make error explanations more engaging:
+
+```{r}
+# Get error explanation with a professor voice
+tldr_error(
+  "Error in if (x > 0) { : missing value where TRUE/FALSE needed",
+  voice = "professor"
+)
+
+# List available voices
+tldr_list_voices()
+```
+
+# Context-Aware Error Analysis
+
+## Leveraging Your R Environment
+
+By default, `tldr_error()` analyzes your current R environment to provide more relevant explanations:
+
+```{r}
+# Create some data
+df <- data.frame(a = 1:5, b = 6:10)
+
+# Try a function that will error
+ggplot(df, aes(x = a, y = b)) + geom_point()
+
+# Analyze with context awareness
+tldr_error(auto_capture = TRUE)
+```
+
+With context awareness enabled, the function can:
+
+- Recognize loaded packages and suggest missing ones
+- Reference your actual data frames and variables
+- Understand your recent command history
+- Provide examples that work with your specific environment
+
+You can disable context awareness if you prefer more general explanations:
+
+```{r}
+tldr_error(
+  "Error in ggplot(df, aes(x = a, y = b)) : could not find function 'ggplot'",
+  context = FALSE
+)
+```
+
+# Automatic Error Handling
+
+## Auto-Explaining All Errors
+
+For a more interactive experience, you can enable automatic error explanations:
+
+```{r}
+# Enable automatic error explanations
+tldr_auto_error(TRUE)
+
+# Now any error will be automatically explained
+mean(nonexistent_variable)
+```
+
+This replaces R's default error handler with one that automatically analyzes and explains errors as they occur. You can disable this feature when you no longer need it:
+
+```{r}
+# Disable automatic error explanations
+tldr_auto_error(FALSE)
+```
+
+# Error Patterns and Solutions
+
+The `tldr_error()` function recognizes many common error patterns in R and provides targeted solutions:
+
+## Missing Objects
+
+```{r}
+tldr_error("Error: object 'df' not found")
+```
+
+This will explain why objects can be missing and suggest solutions like checking for typos, properly loading data, or ensuring the object was actually created.
+
+## Function Not Found
+
+```{r}
+tldr_error("Error: could not find function 'ggplot'")
+```
+
+The explanation will identify likely causes like missing packages, namespace issues, or typos, and provide appropriate installation commands or namespace solutions.
+
+## Syntax Errors
+
+```{r}
+tldr_error("Error: unexpected '}' in \"if(x > 0) {}\"")
+```
+
+Syntax errors are explained with clear guidance on R's syntax rules and examples of correct structure.
+
+## Type Mismatches
+
+```{r}
+tldr_error("Error: non-numeric argument to binary operator")
+```
+
+The function will explain type compatibility issues and how to properly convert between types.
+
+## Package-Specific Errors
+
+```{r}
+tldr_error("Error: geom_point requires the following missing aesthetics: x")
+```
+
+For common packages like ggplot2, dplyr, and others, you'll get package-specific advice that explains the error in the context of how that package works.
+
+# Advanced Usage
+
+## Integration with Development Workflows
+
+You can integrate error analysis into your development workflows:
+
+```{r}
+# In testing scripts
+run_tests <- function() {
+  tryCatch(
+    {
+      # Your test code here
+      test_results <- run_your_tests()
+      test_results
+    },
+    error = function(e) {
+      cat("Test failed with error:\n")
+      tldr_error(e, context = TRUE)
+      NULL
+    }
+  )
+}
+```
+
+## Debugging Complex Errors
+
+For complex errors, `tldr_error()` can analyze the traceback to identify the root cause:
+
+```{r}
+complex_function <- function() {
+  inner_function()
+}
+
+inner_function <- function() {
+  deepest_function()
+}
+
+deepest_function <- function() {
+  # This will error
+  1 + "string"
+}
+
+# Capture and analyze complex error
+tryCatch(
+  complex_function(),
+  error = function(e) {
+    tldr_error(e)
+  }
+)
+```
+
+# Conclusion
+
+The `tldr_error()` function transforms frustrating R error messages into learning opportunities. By providing clear explanations, practical solutions, and working examples, it helps you resolve issues quickly and deepen your understanding of R.
+
+We recommend using this feature when:
+
+- Learning R or a new package
+- Debugging complex code
+- Teaching or mentoring others
+- Working with unfamiliar codebases
+
+The AI-powered error analysis in `tldrAI` helps make the debugging process more efficient and educational, turning error messages from roadblocks into stepping stones for improvement.
