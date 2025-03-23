@@ -1,0 +1,305 @@
+---
+title: "Secure API Key Management with tldrAI"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Secure API Key Management with tldrAI}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+# Introduction
+
+API keys are credentials that provide access to cloud services. In the case of `tldrAI`, they're required to communicate with Large Language Model (LLM) providers like Anthropic's Claude and OpenAI. Properly managing these keys is crucial for security and convenience.
+
+This vignette explains the secure API key management system in `tldrAI`, which offers multiple options for storing and retrieving API keys with a focus on security best practices.
+
+## Why Secure API Key Management Matters
+
+API keys for LLM providers like Claude and OpenAI:
+
+1. **Grant access to paid services** that incur costs based on usage
+2. **Can be misused** if obtained by unauthorized parties
+3. **Should not be shared** in code repositories or public spaces
+4. **Represent a personal account credential** that should be protected
+
+The `tldrAI` package now offers secure storage of these API keys using your system's credential store via the `keyring` package, which is a significant security improvement over storing keys in plain text configuration files.
+
+# Setting Up API Keys Securely
+
+## Prerequisite: Install the keyring Package
+
+The secure storage feature relies on the `keyring` package, which provides access to your operating system's secure credential store. If you haven't already installed it:
+
+```{r}
+install.packages("keyring")
+```
+
+## Securely Storing API Keys
+
+The recommended way to store your API keys is using the `tldr_set_api_key()` function:
+
+```{r}
+library(tldrAI)
+
+# Store Claude API key securely
+tldr_set_api_key("your_claude_api_key", "claude")
+
+# Store OpenAI API key securely
+tldr_set_api_key("your_openai_api_key", "openai")
+```
+
+This function:
+
+1. Stores your key in the system's secure credential store
+2. Removes the key from the plain text configuration file if it was previously stored there
+3. Uses service name "tldrAI" and username matching the provider ("claude" or "openai")
+
+## Verifying API Key Storage
+
+You can check if an API key is available for a specific provider:
+
+```{r}
+# Check if Claude API key is available
+tldr_has_api_key("claude")
+
+# Check if OpenAI API key is available
+tldr_has_api_key("openai")
+```
+
+This function checks for keys in all possible locations (environment variables, keyring, and config file) without displaying the key values.
+
+## Testing Your API Connection
+
+To verify that your API keys are working correctly:
+
+```{r}
+# Test Claude connection
+tldr_test_connection("claude")
+
+# Test OpenAI connection
+tldr_test_connection("openai")
+```
+
+# How tldrAI Manages API Keys
+
+## Key Storage Hierarchy
+
+The package uses a priority-based approach to find API keys:
+
+1. **Environment variables** (`CLAUDE_API_KEY` or `OPENAI_API_KEY`) - highest priority
+2. **System keyring** (secure credential store) - medium priority
+3. **Configuration file** (plain text file) - lowest priority
+
+This hierarchy ensures compatibility with different setups while prioritizing security:
+
+- CI/CD environments and servers typically use environment variables
+- Development machines benefit from secure keyring storage
+- Legacy configurations still work without any changes
+
+## Configuring Key Storage Behavior
+
+You can control how `tldrAI` handles API keys with the `tldr_config()` function:
+
+```{r}
+# Enable secure keyring storage (default)
+tldr_config(use_keyring = TRUE)
+
+# Disable secure keyring storage (not recommended for regular use)
+tldr_config(use_keyring = FALSE)
+```
+
+When `use_keyring = TRUE` (the default):
+
+- The `tldr_config()` function will store new API keys in the system keyring if available
+- You'll be prompted to migrate existing keys to the secure storage
+
+# Migrating From Plain Text to Secure Storage
+
+If you've been using `tldrAI` with API keys stored in the configuration file, you can easily migrate to secure storage.
+
+## Automatic Migration Notification
+
+When you load the package and it detects API keys in the configuration file, you'll see a notification suggesting migration:
+
+```
+tldrAI: Found API keys in configuration that could be stored more securely.
+       Run tldr_key_migrate() to move keys to your system's secure keyring.
+```
+
+## Manual Migration
+
+To migrate your existing keys:
+
+```{r}
+# Start the migration process
+tldr_key_migrate()
+```
+
+This function:
+
+1. Detects API keys stored in your configuration file
+2. Prompts for confirmation before migration
+3. Securely stores keys in the system keyring
+4. Removes keys from the configuration file
+5. Returns a report of which keys were migrated
+
+## Clearing Stored API Keys
+
+If you need to remove API keys from the secure storage:
+
+```{r}
+# Remove Claude API key
+tldr_clear_api_key("claude")
+
+# Remove OpenAI API key without confirmation
+tldr_clear_api_key("openai", confirm = FALSE)
+```
+
+# Security Best Practices
+
+## Do's and Don'ts
+
+**Do:**
+
+- ✓ Use the secure keyring storage when possible
+- ✓ Use environment variables for CI/CD environments
+- ✓ Regularly check your LLM provider usage dashboards
+- ✓ Keep the `keyring` package updated
+- ✓ Clear API keys when no longer needed
+
+**Don't:**
+
+- ✗ Share API keys in code, repositories, or public forums
+- ✗ Store API keys in plain text files that might be backed up or synced
+- ✗ Leave API keys in environment variables permanently on shared machines
+- ✗ Ignore the migration prompts - secure storage is important
+
+## Environment-Specific Recommendations
+
+### Development Environment
+
+```{r}
+# Recommended setup for personal development
+tldr_set_api_key("your_api_key", "claude")
+tldr_config(use_keyring = TRUE)
+```
+
+### CI/CD Environment
+
+```bash
+# Set environment variables in your CI/CD system (not in R)
+export CLAUDE_API_KEY=your_claude_api_key
+export OPENAI_API_KEY=your_openai_api_key
+```
+
+The package will automatically find and use these environment variables.
+
+### Server Environment
+
+```{r}
+# Option 1: Environment variables (preferred for servers)
+# Set in your server environment, not in R code
+
+# Option 2: If private user accounts need different keys
+tldr_set_api_key("your_api_key", "claude")
+```
+
+# Technical Details
+
+## How Secure Storage Works
+
+The `keyring` package connects to your operating system's native credential store:
+
+- **Windows**: Windows Credential Manager
+- **macOS**: Keychain
+- **Linux**: Secret Service API/libsecret (GNOME Keyring, KDE Wallet)
+
+These systems:
+
+1. Encrypt the stored credentials
+2. Typically require authentication to access
+3. Are designed specifically for securely storing sensitive information
+4. Are not included in regular file backups or synchronization
+
+## Fallback Mechanisms
+
+If the `keyring` package is not available:
+
+1. A warning message is displayed
+2. The system falls back to using the configuration file
+3. All functionality continues to work, just with reduced security
+
+## Cross-Platform Compatibility
+
+The secure storage system works across all major operating systems, but there are some platform-specific considerations:
+
+- **Linux**: May require additional setup for the secret service (e.g., `libsecret-1-dev` package)
+- **Headless systems**: May have limited keyring support, consider environment variables
+- **RStudio Server/Cloud**: Varies by configuration, test the keyring availability
+
+# Troubleshooting
+
+## Common Issues and Solutions
+
+**Problem**: "Failed to store API key in keyring" message
+
+**Solutions**:
+- Check if `keyring` package is installed: `install.packages("keyring")`
+- On Linux, install required dependencies: `sudo apt-get install libsecret-1-dev`
+- Verify your system's credential store is working properly
+
+**Problem**: API key works in one session but not another
+
+**Solutions**:
+- Check if you're using environment variables that might be session-specific
+- Ensure the keyring service is running on your system
+- Verify permissions on the configuration directory
+
+**Problem**: Need to use different API keys for different projects
+
+**Solutions**:
+- Use environment variables with project-specific settings
+- Use different R profiles for different projects
+- Set the API key at the start of each session
+
+## Diagnosing Keyring Issues
+
+If you're experiencing problems with the keyring integration:
+
+```{r}
+# Check if keyring package can be loaded
+requireNamespace("keyring", quietly = TRUE)
+
+# Test basic keyring functionality (if available)
+if(requireNamespace("keyring", quietly = TRUE)) {
+  tryCatch({
+    keyring::key_set_with_value("test", "test", "test")
+    keyring::key_get("test", "test")
+    keyring::key_delete("test", "test")
+    message("Keyring test successful")
+  }, error = function(e) {
+    message("Keyring test failed: ", e$message)
+  })
+}
+```
+
+# Conclusion
+
+Secure API key management is an important aspect of working with LLM providers. The `tldrAI` package now offers a robust system for managing your API keys securely across different environments.
+
+By using the secure storage options, you can:
+
+- Keep your API keys protected from unauthorized access
+- Avoid accidentally sharing credentials in repositories or backups
+- Ensure your keys are available when needed
+- Maintain compatibility with CI/CD and server environments
+
+We recommend migrating to the secure storage system if you're currently using configuration files for your API keys.
