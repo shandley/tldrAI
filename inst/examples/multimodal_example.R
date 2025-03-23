@@ -109,3 +109,38 @@ html_multimodal <- tldr_multimodal(
 )
 
 print(html_multimodal)
+
+#--------------------------------------------------
+# Test with DiagrammeR visualizations
+#--------------------------------------------------
+# Install DiagrammeR if not already installed
+if (!requireNamespace("DiagrammeR", quietly = TRUE)) {
+  install.packages("DiagrammeR", repos = "https://cloud.r-project.org/")
+}
+
+# Test with dplyr function and diagram visualization
+dplyr_viz <- tldr(
+  "dplyr::filter", 
+  multimodal = TRUE,
+  visualization_types = c("diagram", "function_network", "code_highlight")
+)
+
+# Test with ggplot2 function with all visualization types
+ggplot_viz <- tldr(
+  "ggplot2::ggplot", 
+  multimodal = TRUE,
+  visualization_types = c("diagram", "data_flow", "function_network", "code_highlight"),
+  theme = "dark"  # Test dark theme
+)
+
+# Test with base R function
+base_viz <- tldr(
+  "mean", 
+  multimodal = TRUE,
+  visualization_types = c("diagram", "data_flow", "function_network", "code_highlight")
+)
+
+# Display the visualizations
+print(dplyr_viz)
+print(ggplot_viz)
+print(base_viz)

@@ -306,18 +306,7 @@ selected_names <- <span style="color: ${codeColors.keyword};">filter</span>(data
     `;
   }
   
-  // Use fallback visualization while we fix the R function integration
-  vizContainer.innerHTML = fallbackViz;
-  vizContainer.setAttribute('data-loaded', 'true');
-  
-  // Hide loading indicator
-  if (loadingDiv) {
-    loadingDiv.style.display = 'none';
-  }
-  
-  /* Temporarily commented out until R function integration is fixed
-  // Use Shiny.renderDependencies or direct R call through HTMLWidgets.evaluateStringMember
-  // to load the visualization
+  // Try to use R's visualization system, with fallback to JavaScript
   try {
     // Using R's callback mechanism to generate visualization
     const callback = 'load_visualization_tab';
@@ -326,7 +315,8 @@ selected_names <- <span style="color: ${codeColors.keyword};">filter</span>(data
     const params = {
       func_name: funcName,
       metadata: metadata,
-      vis_type: visType
+      vis_type: visType,
+      theme: isDarkTheme ? 'dark' : 'light'
     };
     
     // Call to R function
@@ -336,37 +326,51 @@ selected_names <- <span style="color: ${codeColors.keyword};">filter</span>(data
         func_name: funcName,
         metadata: metadata,
         vis_type: visType,
+        theme: isDarkTheme ? 'dark' : 'light',
         container_id: vizContainer.id,
         callback: callback
       });
+      
+      // Set a timeout to switch to fallback if R visualization doesn't load
+      setTimeout(function() {
+        if (!vizContainer.hasAttribute('data-loaded')) {
+          console.log("R visualization timeout, using fallback");
+          vizContainer.innerHTML = fallbackViz;
+          vizContainer.setAttribute('data-loaded', 'true');
+          if (loadingDiv) loadingDiv.style.display = 'none';
+        }
+      }, 3000); // 3 second timeout
     } else {
       // Direct HTMLWidgets call (for non-Shiny use)
       HTMLWidgets.evaluateStringMember(callback, params, function(err, visualization) {
         if (err) {
           console.error("Error loading visualization:", err);
-          showErrorInContainer(vizContainer, "Failed to load visualization");
+          // Use fallback on error
+          vizContainer.innerHTML = fallbackViz;
+          vizContainer.setAttribute('data-loaded', 'true');
         } else {
           // Insert visualization content
           vizContainer.innerHTML = visualization;
           vizContainer.setAttribute('data-loaded', 'true');
-          
-          // Hide loading indicator
-          if (loadingDiv) {
-            loadingDiv.style.display = 'none';
-          }
+        }
+        
+        // Hide loading indicator
+        if (loadingDiv) {
+          loadingDiv.style.display = 'none';
         }
       });
     }
   } catch (error) {
     console.error("Error setting up visualization:", error);
-    showErrorInContainer(vizContainer, "Failed to load visualization");
+    // Use fallback on error
+    vizContainer.innerHTML = fallbackViz;
+    vizContainer.setAttribute('data-loaded', 'true');
     
     // Hide loading indicator
     if (loadingDiv) {
       loadingDiv.style.display = 'none';
     }
   }
-  */
 }
 
 /**

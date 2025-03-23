@@ -467,20 +467,31 @@ get_theme_colors <- function(theme) {
 #' @param func_name Name of the function
 #' @param metadata Function metadata
 #' @param vis_type Type of visualization to generate
+#' @param theme Color theme to use ("light" or "dark")
 #' @return HTML representation of the visualization
 #' @export
-load_visualization_tab <- function(func_name, metadata, vis_type) {
-  # Create visualization handler
-  handler <- VisualizationHandler$new()
+load_visualization_tab <- function(func_name, metadata, vis_type, theme = "light") {
+  # Get theme colors
+  colors <- get_theme_colors(theme)
   
-  # Generate the visualization
-  visualization <- handler$generate_visualization(func_name, metadata, vis_type, prompt_install = FALSE)
+  # Select the appropriate visualization function based on type
+  visualization <- NULL
+  
+  if (vis_type == "diagram") {
+    visualization <- generate_function_diagram_panel(func_name, metadata, theme)
+  } else if (vis_type == "data_flow") {
+    visualization <- generate_data_transformation_panel(func_name, metadata, theme = theme)
+  } else if (vis_type == "function_network") {
+    visualization <- generate_function_network_panel(func_name, metadata, theme)
+  } else if (vis_type == "code_highlight") {
+    visualization <- generate_code_highlight_panel(func_name, metadata, theme)
+  }
   
   # Convert visualization to HTML
   if (is.null(visualization)) {
-    return(htmltools::tags$div(
+    return(htmltools::doRenderTags(htmltools::tags$div(
       class = "tldrAI-error",
-      style = "color: #D32F2F; text-align: center; padding: 20px;",
+      style = paste0("color: ", if(theme == "dark") "#FF6B6B" else "#D32F2F", "; text-align: center; padding: 20px;"),
       htmltools::tags$p(
         style = "font-size: 16px; margin-bottom: 10px;",
         "Visualization failed to load"
@@ -488,31 +499,63 @@ load_visualization_tab <- function(func_name, metadata, vis_type) {
       htmltools::tags$p(
         "Please ensure required packages are installed for this visualization type."
       )
-    ))
+    )))
   }
   
   # Handle different visualization types
   if (inherits(visualization, "htmlwidget")) {
-    # Already an HTML widget, return as is
-    return(visualization)
+    # For htmlwidgets (like DiagrammeR, visNetwork), we need special handling
+    widget_html <- htmlwidgets::saveWidget(
+      visualization, 
+      file = tempfile(fileext = ".html"), 
+      selfcontained = TRUE
+    )
+    
+    # Extract the widget contents (this is a workaround but necessary)
+    # We need to extract the HTML content from the saved widget file
+    widget_content <- readLines(widget_html, warn = FALSE)
+    widget_content <- paste(widget_content, collapse = "\n")
+    
+    # Extract just the content portion we need
+    widget_content <- gsub(".*<body>", "", widget_content)
+    widget_content <- gsub("</body>.*", "", widget_content)
+    
+    return(widget_content)
   } else if (inherits(visualization, "grViz") || inherits(visualization, "DiagrammeR")) {
-    # DiagrammeR visualization
-    return(visualization)
+    # Convert DiagrammeR visualization to HTML
+    widget_html <- htmlwidgets::saveWidget(
+      visualization, 
+      file = tempfile(fileext = ".html"), 
+      selfcontained = TRUE
+    )
+    widget_content <- readLines(widget_html, warn = FALSE)
+    widget_content <- paste(widget_content, collapse = "\n")
+    widget_content <- gsub(".*<body>", "", widget_content)
+    widget_content <- gsub("</body>.*", "", widget_content)
+    return(widget_content)
   } else if (inherits(visualization, "shiny.tag") || inherits(visualization, "html")) {
     # HTML content
-    return(visualization)
+    return(htmltools::doRenderTags(visualization))
   } else if (is.character(visualization)) {
     # ASCII fallback - convert to pre-formatted text
-    return(htmltools::tags$pre(
-      style = "background-color: #F5F7F9; padding: 15px; border-radius: 4px; overflow-x: auto;",
+    return(htmltools::doRenderTags(htmltools::tags$pre(
+      style = paste0(
+        "background-color: ", colors$codeBackground, "; ",
+        "color: ", colors$codeText, "; ",
+        "padding: 15px; border-radius: 4px; overflow-x: auto;"
+      ),
       visualization
-    ))
+    )))
   } else {
     # Unknown type, convert to string representation
-    return(htmltools::tags$pre(
-      style = "background-color: #F5F7F9; padding: 15px; border-radius: 4px; overflow-x: auto;",
+    return(htmltools::doRenderTags(htmltools::tags$pre(
+      style = paste0(
+        "background-color: ", colors$codeBackground, "; ",
+        "color: ", colors$codeText, "; ",
+        "padding: 15px; border-radius: 4px; overflow-x: auto;"
+      ),
       deparse(visualization)
-    ))
+    )))
   }
 }
 
@@ -596,12 +639,16 @@ generate_function_diagram_panel <- function(func_name, metadata) {
 #' @param func_name Name of the function
 #' @param metadata Function metadata
 #' @param sample_data Optional sample data to use in visualization
+#' @param theme Color theme ("light" or "dark")
 #' @return HTML visualization of data transformation
 #' @export
-generate_data_transformation_panel <- function(func_name, metadata, sample_data = NULL) {
+generate_data_transformation_panel <- function(func_name, metadata, sample_data = NULL, theme = "light") {
   if (!requireNamespace("htmltools", quietly = TRUE)) {
-    return(generate_ascii_data_flow(func_name, metadata))
+    return(generate_ascii_data_flow(func_name, metadata, theme))
   }
+  
+  # Get colors based on theme
+  colors <- get_theme_colors(theme)
   
   # Determine if this is a dplyr-like function
   pkg <- metadata$package %||% "Unknown"
@@ -610,11 +657,18 @@ generate_data_transformation_panel <- function(func_name, metadata, sample_data 
   
   # Create HTML container
   container <- htmltools::tags$div(
-    style = "font-family: Arial; padding: 10px;",
+    style = paste0(
+      "font-family: Arial; padding: 10px; ",
+      "color: ", colors$text, ";"
+    ),
     
     # Title
     htmltools::tags$h3(
-      style = "color: #4285F4; border-bottom: 1px solid #DADCE0; padding-bottom: 8px;",
+      style = paste0(
+        "color: ", colors$primary, "; ",
+        "border-bottom: 1px solid ", colors$border, "; ",
+        "padding-bottom: 8px;"
+      ),
       paste0("Data Transformation: ", func_name)
     ),
     
@@ -626,10 +680,10 @@ generate_data_transformation_panel <- function(func_name, metadata, sample_data 
       htmltools::tags$div(
         style = "flex: 1; margin-right: 10px;",
         htmltools::tags$h4(
-          style = "color: #34A853; margin-bottom: 10px;",
+          style = paste0("color: ", colors$secondary, "; margin-bottom: 10px;"),
           "Before"
         ),
-        create_data_table(get_sample_data("before", func_name, is_dplyr, is_filter))
+        create_data_table(get_sample_data("before", func_name, is_dplyr, is_filter), NULL, colors)
       ),
       
       # Arrow and function
@@ -642,7 +696,8 @@ generate_data_transformation_panel <- function(func_name, metadata, sample_data 
         # Function box
         htmltools::tags$div(
           style = paste0(
-            "background-color: #4285F4; color: white; padding: 10px 15px; ",
+            "background-color: ", colors$primary, "; ",
+            "color: white; padding: 10px 15px; ",
             "border-radius: 4px; margin-bottom: 10px; font-weight: bold;"
           ),
           func_name
@@ -650,14 +705,16 @@ generate_data_transformation_panel <- function(func_name, metadata, sample_data 
         
         # Arrow
         htmltools::tags$div(
-          style = "font-size: 24px; color: #4285F4;",
+          style = paste0("font-size: 24px; color: ", colors$primary, ";"),
           "→"
         ),
         
         # Code snippet
         htmltools::tags$pre(
           style = paste0(
-            "background-color: #F5F7F9; padding: 8px; border-radius: 4px; ",
+            "background-color: ", colors$codeBackground, "; ",
+            "color: ", colors$codeText, "; ",
+            "padding: 8px; border-radius: 4px; ",
             "margin-top: 10px; font-size: 12px; max-width: 200px; overflow-x: auto;"
           ),
           htmltools::tags$code(
@@ -673,16 +730,23 @@ generate_data_transformation_panel <- function(func_name, metadata, sample_data 
           style = "color: #EA4335; margin-bottom: 10px;",
           "After"
         ),
-        create_data_table(get_sample_data("after", func_name, is_dplyr, is_filter), 
-                         highlight = if(is_filter) c(1, 3) else NULL)
+        create_data_table(
+          get_sample_data("after", func_name, is_dplyr, is_filter), 
+          highlight = if(is_filter) c(1, 3) else NULL,
+          colors = colors
+        )
       )
     ),
     
     # Explanation
     htmltools::tags$div(
-      style = "margin-top: 20px; padding: 15px; background-color: #F8F9FA; border-radius: 4px;",
+      style = paste0(
+        "margin-top: 20px; padding: 15px; ",
+        "background-color: ", colors$secondaryBg, "; ",
+        "border-radius: 4px;"
+      ),
       htmltools::tags$h4(
-        style = "color: #4285F4; margin-top: 0;",
+        style = paste0("color: ", colors$primary, "; margin-top: 0;"),
         "How it works"
       ),
       htmltools::tags$p(
@@ -698,21 +762,34 @@ generate_data_transformation_panel <- function(func_name, metadata, sample_data 
 #'
 #' @param data Data frame to display
 #' @param highlight Row indices to highlight
+#' @param colors Theme colors list
 #' @return HTML table
 #' @keywords internal
-create_data_table <- function(data, highlight = NULL) {
+create_data_table <- function(data, highlight = NULL, colors) {
+  # Default colors if not provided
+  if (missing(colors) || is.null(colors)) {
+    colors <- get_theme_colors("light")
+  }
+  
+  # Get theme-specific colors
+  border_color <- colors$border
+  header_bg <- if (colors$background == "#1E1E1E") "#3D3D3D" else "#F1F3F4"
+  highlight_bg <- if (colors$background == "#1E1E1E") "#3A3216" else "#FFF0E0"
+  row_border <- border_color
+  
   # Create table container
   table_html <- htmltools::tags$table(
     style = paste0(
       "width: 100%; border-collapse: collapse; font-size: 14px; ",
-      "border: 1px solid #DADCE0; border-radius: 4px; overflow: hidden;"
+      "border: 1px solid ", border_color, "; border-radius: 4px; overflow: hidden; ",
+      "color: ", colors$text, ";"
     ),
     
     # Table header
     htmltools::tags$thead(
-      style = "background-color: #F1F3F4;",
+      style = paste0("background-color: ", header_bg, ";"),
       htmltools::tags$tr(
-        style = "border-bottom: 2px solid #DADCE0;",
+        style = paste0("border-bottom: 2px solid ", border_color, ";"),
         lapply(names(data), function(col) {
           htmltools::tags$th(
             style = "padding: 8px 12px; text-align: left; font-weight: bold;",
@@ -729,11 +806,12 @@ create_data_table <- function(data, highlight = NULL) {
         is_highlighted <- row %in% highlight
         row_style <- if(is_highlighted) {
           paste0(
-            "border-bottom: 1px solid #DADCE0; background-color: #FFF0E0; ",
+            "border-bottom: 1px solid ", row_border, "; ",
+            "background-color: ", highlight_bg, "; ",
             "font-weight: bold;"
           )
         } else {
-          "border-bottom: 1px solid #DADCE0;"
+          paste0("border-bottom: 1px solid ", row_border, ";")
         }
         
         htmltools::tags$tr(
@@ -958,4 +1036,789 @@ capitalize <- function(x) {
 #' @keywords internal
 `%||%` <- function(x, y) {
   if (is.null(x)) y else x
+}
+
+#' Generate a function diagram for the panel
+#' 
+#' @description Creates a specialized diagram showing function input and output flow
+#' @param func_name Name of the function
+#' @param metadata Function metadata
+#' @param theme Color theme ("light" or "dark")
+#' @return HTML/SVG diagram of function data flow
+#' @export
+generate_function_diagram_panel <- function(func_name, metadata, theme = "light") {
+  # Check for DiagrammeR and create ASCII fallback if not available
+  if (!requireNamespace("DiagrammeR", quietly = TRUE)) {
+    return(generate_ascii_diagram(func_name, metadata, theme))
+  }
+  
+  # Extract arguments and return value
+  args <- metadata$args %||% character(0)
+  pkg <- metadata$package %||% "Unknown"
+  returns <- metadata$returns %||% "Unknown"
+  
+  # Get colors based on theme
+  if (theme == "dark") {
+    bg_color <- "#1E1E1E"
+    cluster_bg <- "#2D2D2D"
+    cluster_color <- "#444444"
+    node_color <- "#366B98"
+    node_fill <- "#1E3A5F"
+    func_fill <- "#4285F4"
+    output_color <- "#34A853"
+    output_fill <- "#1A3726"
+    edge_color <- "#5D9FE1"
+    font_color <- "#E8E8E8"
+  } else {
+    bg_color <- "transparent"
+    cluster_bg <- "#F8F9FA"
+    cluster_color <- "#DADCE0"
+    node_color <- "#4285F4"
+    node_fill <- "#E8F0FE"
+    func_fill <- "#4285F4"
+    output_color <- "#34A853"
+    output_fill <- "#E6F4EA"
+    edge_color <- "#4285F4"
+    font_color <- "#333333"
+  }
+  
+  # Create the diagram
+  dot_code <- paste0(
+    "digraph G {\n",
+    "  graph[rankdir=LR, bgcolor=\"", bg_color, "\", fontname=\"Arial\"];\n",
+    "  node[fontname=\"Arial\", fontsize=12, shape=rect, style=filled, fontcolor=\"", font_color, "\"];\n",
+    "  edge[fontname=\"Arial\", fontsize=10, color=\"", edge_color, "\"];\n\n",
+    
+    "  subgraph cluster_input {\n",
+    "    label=\"Input\";\n",
+    "    bgcolor=\"", cluster_bg, "\";\n",
+    "    color=\"", cluster_color, "\";\n",
+    "    fontcolor=\"", font_color, "\";\n"
+  )
+  
+  # Add input nodes
+  for (i in seq_along(args)) {
+    arg_name <- gsub("\\.", "_", args[i]) # DOT doesn't like dots in node names
+    dot_code <- paste0(
+      dot_code,
+      "    arg_", i, " [label=\"", args[i], "\", shape=rect, color=\"", node_color, "\", fillcolor=\"", node_fill, "\"];\n"
+    )
+  }
+  
+  dot_code <- paste0(
+    dot_code,
+    "  }\n\n",
+    
+    "  function [label=\"", func_name, "\\n(", pkg, ")\", fillcolor=\"", func_fill, "\", fontcolor=\"white\", penwidth=2];\n\n",
+    
+    "  subgraph cluster_output {\n",
+    "    label=\"Output\";\n",
+    "    bgcolor=\"", cluster_bg, "\";\n",
+    "    color=\"", cluster_color, "\";\n",
+    "    fontcolor=\"", font_color, "\";\n",
+    "    return_val [label=\"", returns, "\", fillcolor=\"", output_fill, "\", color=\"", output_color, "\"];\n",
+    "  }\n\n"
+  )
+  
+  # Add edges from inputs to function
+  for (i in seq_along(args)) {
+    dot_code <- paste0(
+      dot_code,
+      "  arg_", i, " -> function;\n"
+    )
+  }
+  
+  # Add edge from function to output
+  dot_code <- paste0(
+    dot_code,
+    "  function -> return_val;\n"
+  )
+  
+  # Close the graph
+  dot_code <- paste0(dot_code, "}\n")
+  
+  # Create graph using DiagrammeR
+  diagram <- DiagrammeR::grViz(dot_code, width = "100%", height = 400)
+  
+  # Set the theme-appropriate background for the widget container
+  if (theme == "dark") {
+    diagram <- htmlwidgets::onRender(diagram, "function(el, x) {
+      el.closest('.html-widget').style.backgroundColor = '#1E1E1E';
+    }")
+  }
+  
+  return(diagram)
+}
+
+#' Generate a data transformation visualization
+#'
+#' @description Creates a visualization showing how data is transformed by a function
+#' @param func_name Name of the function
+#' @param metadata Function metadata
+#' @param sample_data Optional sample data to use in visualization
+#' @param theme Color theme ("light" or "dark")
+#' @return HTML visualization of data transformation
+#' @export
+generate_data_transformation_panel <- function(func_name, metadata, sample_data = NULL, theme = "light") {
+  if (!requireNamespace("htmltools", quietly = TRUE)) {
+    return(generate_ascii_data_flow(func_name, metadata, theme))
+  }
+  
+  # Get colors based on theme
+  colors <- get_theme_colors(theme)
+  
+  # Determine if this is a dplyr-like function
+  pkg <- metadata$package %||% "Unknown"
+  is_dplyr <- pkg %in% c("dplyr", "tidyr")
+  is_filter <- grepl("filter", func_name, ignore.case = TRUE)
+  
+  # Create HTML container
+  container <- htmltools::tags$div(
+    style = paste0(
+      "font-family: Arial; padding: 10px; ",
+      "color: ", colors$text, ";"
+    ),
+    
+    # Title
+    htmltools::tags$h3(
+      style = paste0(
+        "color: ", colors$primary, "; ",
+        "border-bottom: 1px solid ", colors$border, "; ",
+        "padding-bottom: 8px;"
+      ),
+      paste0("Data Transformation: ", func_name)
+    ),
+    
+    # Create a before/after visualization
+    htmltools::tags$div(
+      style = "display: flex; flex-direction: row; justify-content: space-between; margin-top: 20px;",
+      
+      # Before data
+      htmltools::tags$div(
+        style = "flex: 1; margin-right: 10px;",
+        htmltools::tags$h4(
+          style = paste0("color: ", colors$secondary, "; margin-bottom: 10px;"),
+          "Before"
+        ),
+        create_data_table(get_sample_data("before", func_name, is_dplyr, is_filter), NULL, colors)
+      ),
+      
+      # Arrow and function
+      htmltools::tags$div(
+        style = paste0(
+          "display: flex; flex-direction: column; justify-content: center; ",
+          "align-items: center; padding: 0 20px;"
+        ),
+        
+        # Function box
+        htmltools::tags$div(
+          style = paste0(
+            "background-color: ", colors$primary, "; ",
+            "color: white; padding: 10px 15px; ",
+            "border-radius: 4px; margin-bottom: 10px; font-weight: bold;"
+          ),
+          func_name
+        ),
+        
+        # Arrow
+        htmltools::tags$div(
+          style = paste0("font-size: 24px; color: ", colors$primary, ";"),
+          "→"
+        ),
+        
+        # Code snippet
+        htmltools::tags$pre(
+          style = paste0(
+            "background-color: ", colors$codeBackground, "; ",
+            "color: ", colors$codeText, "; ",
+            "padding: 8px; border-radius: 4px; ",
+            "margin-top: 10px; font-size: 12px; max-width: 200px; overflow-x: auto;"
+          ),
+          htmltools::tags$code(
+            get_example_code(func_name, is_dplyr, is_filter)
+          )
+        )
+      ),
+      
+      # After data
+      htmltools::tags$div(
+        style = "flex: 1; margin-left: 10px;",
+        htmltools::tags$h4(
+          style = "color: #EA4335; margin-bottom: 10px;",
+          "After"
+        ),
+        create_data_table(
+          get_sample_data("after", func_name, is_dplyr, is_filter), 
+          highlight = if(is_filter) c(1, 3) else NULL,
+          colors = colors
+        )
+      )
+    ),
+    
+    # Explanation
+    htmltools::tags$div(
+      style = paste0(
+        "margin-top: 20px; padding: 15px; ",
+        "background-color: ", colors$secondaryBg, "; ",
+        "border-radius: 4px;"
+      ),
+      htmltools::tags$h4(
+        style = paste0("color: ", colors$primary, "; margin-top: 0;"),
+        "How it works"
+      ),
+      htmltools::tags$p(
+        get_transformation_explanation(func_name, is_dplyr, is_filter)
+      )
+    )
+  )
+  
+  return(container)
+}
+
+#' Create a styled data table for visualization
+#'
+#' @param data Data frame to display
+#' @param highlight Row indices to highlight
+#' @param colors Theme colors list
+#' @return HTML table
+#' @keywords internal
+create_data_table <- function(data, highlight = NULL, colors) {
+  # Default colors if not provided
+  if (missing(colors) || is.null(colors)) {
+    colors <- get_theme_colors("light")
+  }
+  
+  # Get theme-specific colors
+  border_color <- colors$border
+  header_bg <- if (colors$background == "#1E1E1E") "#3D3D3D" else "#F1F3F4"
+  highlight_bg <- if (colors$background == "#1E1E1E") "#3A3216" else "#FFF0E0"
+  row_border <- border_color
+  
+  # Create table container
+  table_html <- htmltools::tags$table(
+    style = paste0(
+      "width: 100%; border-collapse: collapse; font-size: 14px; ",
+      "border: 1px solid ", border_color, "; border-radius: 4px; overflow: hidden; ",
+      "color: ", colors$text, ";"
+    ),
+    
+    # Table header
+    htmltools::tags$thead(
+      style = paste0("background-color: ", header_bg, ";"),
+      htmltools::tags$tr(
+        style = paste0("border-bottom: 2px solid ", border_color, ";"),
+        lapply(names(data), function(col) {
+          htmltools::tags$th(
+            style = "padding: 8px 12px; text-align: left; font-weight: bold;",
+            col
+          )
+        })
+      )
+    ),
+    
+    # Table body
+    htmltools::tags$tbody(
+      lapply(1:nrow(data), function(row) {
+        # Determine if this row should be highlighted
+        is_highlighted <- row %in% highlight
+        row_style <- if(is_highlighted) {
+          paste0(
+            "border-bottom: 1px solid ", row_border, "; ",
+            "background-color: ", highlight_bg, "; ",
+            "font-weight: bold;"
+          )
+        } else {
+          paste0("border-bottom: 1px solid ", row_border, ";")
+        }
+        
+        htmltools::tags$tr(
+          style = row_style,
+          lapply(1:ncol(data), function(col) {
+            htmltools::tags$td(
+              style = "padding: 8px 12px;",
+              as.character(data[row, col])
+            )
+          })
+        )
+      })
+    )
+  )
+  
+  return(table_html)
+}
+
+#' Generate a function network visualization
+#' @description Creates a visualization showing related functions in a network
+#' @param func_name Name of the function
+#' @param metadata Function metadata
+#' @param theme Color theme ("light" or "dark")
+#' @return HTML visualization of function network
+#' @export
+generate_function_network_panel <- function(func_name, metadata, theme = "light") {
+  # Check for required packages
+  if (!requireNamespace("DiagrammeR", quietly = TRUE) && 
+      !requireNamespace("visNetwork", quietly = TRUE)) {
+    ascii_viz <- generate_function_network_ascii(func_name, metadata, theme)
+    return(ascii_viz)
+  }
+  
+  # Extract metadata
+  pkg <- metadata$package %||% "Unknown"
+  
+  # Get related functions
+  related_funcs <- get_related_functions(func_name, pkg)
+  
+  # If no related functions found, use some generic placeholders
+  if (length(related_funcs) == 0) {
+    if (pkg == "dplyr") {
+      related_funcs <- c("select", "mutate", "group_by", "summarize", "arrange")
+    } else if (pkg == "ggplot2") {
+      related_funcs <- c("geom_point", "geom_line", "aes", "theme", "facet_wrap")
+    } else if (pkg == "base" || pkg == "stats") {
+      related_funcs <- c("mean", "median", "var", "sum", "plot")
+    } else {
+      # Generic placeholders
+      related_funcs <- c(
+        paste0("related_", pkg, "_1"),
+        paste0("related_", pkg, "_2"),
+        paste0("related_", pkg, "_3"),
+        paste0("related_", pkg, "_4")
+      )
+    }
+  }
+  
+  # Limit to 5 related functions for better visualization
+  if (length(related_funcs) > 5) {
+    related_funcs <- related_funcs[1:5]
+  }
+  
+  # Get colors based on theme
+  if (theme == "dark") {
+    bg_color <- "#1E1E1E"
+    node_color <- "#366B98"
+    node_fill <- "#1E3A5F"
+    func_fill <- "#4285F4"
+    edge_color <- "#5D9FE1"
+    font_color <- "white"
+    label_color <- "#E8E8E8"
+  } else {
+    bg_color <- "transparent"
+    node_color <- "#4285F4"
+    node_fill <- "#E8F0FE"
+    func_fill <- "#4285F4"
+    edge_color <- "#4285F4"
+    font_color <- "white"
+    label_color <- "#333333"
+  }
+  
+  if (requireNamespace("visNetwork", quietly = TRUE)) {
+    # Create nodes for the function network
+    nodes <- data.frame(
+      id = 1:(length(related_funcs) + 1),
+      label = c(func_name, related_funcs),
+      group = c("main", rep("related", length(related_funcs))),
+      title = c(paste0("Main function: ", func_name), 
+               paste0("Related function in ", pkg, " package: ", related_funcs)),
+      shape = c("box", rep("ellipse", length(related_funcs))),
+      shadow = c(TRUE, rep(FALSE, length(related_funcs))),
+      color.background = c(func_fill, rep(node_fill, length(related_funcs))),
+      color.border = c(node_color, rep(node_color, length(related_funcs))),
+      borderWidth = c(3, rep(1, length(related_funcs))),
+      font.color = c(font_color, rep(label_color, length(related_funcs)))
+    )
+    
+    # Create edges connecting related functions
+    edges <- data.frame(
+      from = rep(1, length(related_funcs)),
+      to = 2:(length(related_funcs) + 1),
+      arrows = "to",
+      smooth = TRUE,
+      color = edge_color,
+      width = 2
+    )
+    
+    # Create the network visualization with interactive options
+    network <- visNetwork::visNetwork(nodes, edges, width = "100%", height = 400) %>%
+      visNetwork::visOptions(highlightNearest = TRUE, nodesIdSelection = TRUE) %>%
+      visNetwork::visLayout(randomSeed = 123) # Consistent layout
+    
+    if (theme == "dark") {
+      network <- network %>% 
+        visNetwork::visOptions(highlightNearest = list(enabled = TRUE, degree = 1)) %>%
+        htmlwidgets::onRender("function(el, x) {
+          el.closest('.html-widget').style.backgroundColor = '#1E1E1E';
+        }")
+    }
+    
+    return(network)
+  } else {
+    # Fallback to DiagrammeR if visNetwork is not available
+    dot_code <- paste0(
+      "digraph func_network {\n",
+      "  graph [bgcolor=\"", bg_color, "\", fontname=\"Arial\", rankdir=LR];\n",
+      "  node [fontname=\"Arial\", fontcolor=\"", label_color, "\", style=filled];\n",
+      "  edge [fontname=\"Arial\", color=\"", edge_color, "\"];\n\n",
+      
+      "  // Main function node\n",
+      "  main [label=\"", func_name, "\", shape=box, fillcolor=\"", func_fill, "\", fontcolor=\"white\", penwidth=2];\n\n",
+      
+      "  // Related function nodes\n"
+    )
+    
+    # Add each related function
+    for (i in seq_along(related_funcs)) {
+      func <- related_funcs[i]
+      node_id <- paste0("rel", i)
+      
+      dot_code <- paste0(
+        dot_code,
+        "  ", node_id, " [label=\"", func, "\", shape=ellipse, fillcolor=\"", node_fill, "\"];\n",
+        "  main -> ", node_id, " [penwidth=1.5];\n\n"
+      )
+    }
+    
+    # Close the graph
+    dot_code <- paste0(dot_code, "}\n")
+    
+    # Create graph using DiagrammeR
+    diagram <- DiagrammeR::grViz(dot_code, width = "100%", height = 400)
+    
+    # Set theme-appropriate background
+    if (theme == "dark") {
+      diagram <- htmlwidgets::onRender(diagram, "function(el, x) {
+        el.closest('.html-widget').style.backgroundColor = '#1E1E1E';
+      }")
+    }
+    
+    return(diagram)
+  }
+}
+
+#' Generate a code highlight visualization
+#' @description Creates a visualization with syntax-highlighted code
+#' @param func_name Name of the function
+#' @param metadata Function metadata
+#' @param theme Color theme ("light" or "dark")
+#' @return HTML visualization with highlighted code
+#' @export
+generate_code_highlight_panel <- function(func_name, metadata, theme = "light") {
+  # Get theme colors
+  colors <- get_theme_colors(theme)
+  
+  # Check for required packages
+  use_highlight_pkg <- requireNamespace("highlight", quietly = TRUE)
+  
+  # Extract metadata
+  pkg <- metadata$package %||% "Unknown"
+  args <- metadata$args %||% character(0)
+  args_str <- paste(args, collapse = ", ")
+  
+  # Try to get actual function source code
+  func_source <- get_function_source(func_name, pkg, args_str)
+  
+  # If we couldn't get the source, use predefined examples
+  if (is.null(func_source)) {
+    # Customize source code based on known packages
+    if (pkg == "dplyr" && func_name == "filter") {
+      func_source <- 'function(.data, ..., .by = NULL, .preserve = FALSE) {
+  # Filter rows that match the given conditions
+  # from package: dplyr
+
+  if (!is.null(.by)) {
+    # Group by specified columns first
+    tmp <- group_by(.data, !!!.by)
+    on.exit(unbind_groups(tmp))
+  } else {
+    tmp <- .data
+  }
+
+  # Evaluate filter conditions
+  dots <- enquos(...)
+  result <- filter_eval(tmp, dots, caller_env())
+
+  # Preserve grouping structure if requested
+  if (.preserve && is_grouped_df(.data)) {
+    result <- preserve_grouping(result, .data)
+  }
+
+  return(result)
+}'
+    } else if (pkg == "ggplot2" && func_name == "ggplot") {
+      func_source <- 'function(data = NULL, mapping = aes(), ..., environment = parent.frame()) {
+  # Create a new ggplot object
+  # from package: ggplot2
+  
+  # Create the plot object
+  p <- structure(list(
+    data = data,
+    layers = list(),
+    scales = scales_list(),
+    mapping = mapping,
+    theme = list(),
+    coordinates = coord_cartesian(),
+    facet = facet_null(),
+    plot_env = environment
+  ), class = c("gg", "ggplot"))
+
+  # Add any additional parameters
+  p <- ggplot_add(dots(...), p, list(...))
+  
+  # Assign default theme
+  p$theme <- theme_get()
+  
+  # Set options and return
+  set_last_plot(p)
+  return(p)
+}'
+    } else {
+      # Default generic function body
+      func_source <- paste0('function(', args_str, ') {
+  # Function implementation for ', func_name, '
+  # From package: ', pkg, '
+  
+  # Process inputs
+  args <- list(...)
+  
+  # Execute function logic
+  result <- process_data(data)
+  
+  # Return output
+  return(result)
+}')
+    }
+  }
+  
+  # Create the HTML for the code
+  if (use_highlight_pkg) {
+    # Use the highlight package for syntax highlighting
+    temp_file <- tempfile(fileext = ".R")
+    writeLines(func_source, temp_file)
+    
+    # Suppress warnings from highlight package
+    old_warn <- options(warn = -1)
+    on.exit(options(old_warn))
+    
+    # Apply theme-specific renderer
+    renderer <- if (theme == "dark") {
+      highlight::renderer_html(doc = FALSE, 
+background = colors$codeBackground,
+highlight = list(background = "#264F78"))
+    } else {
+      highlight::renderer_html(doc = FALSE)
+    }
+    
+    # Create highlighted HTML
+    highlighted <- highlight::highlight(file = temp_file, renderer = renderer)
+    html_code <- htmltools::HTML(highlighted)
+    
+    # Clean up
+    unlink(temp_file)
+  } else {
+    # Manual fallback - create syntax highlighting manually
+    # This is a simple version without full syntax highlighting
+    html_code <- htmltools::pre(
+      style = paste0(
+        "background-color: ", colors$codeBackground, "; ",
+        "color: ", colors$codeText, "; ",
+        "padding: 15px; border-radius: 4px; overflow-x: auto; ",
+        "font-family: 'Consolas', 'Monaco', monospace; line-height: 1.5;"
+      ),
+      htmltools::code(func_source)
+    )
+  }
+  
+  # Create the container
+  container <- htmltools::div(
+    style = paste0(
+      "padding: 20px; ",
+      "background-color: ", colors$background, "; ",
+      "color: ", colors$text, ";"
+    ),
+    
+    # Header
+    htmltools::h3(
+      style = paste0("color: ", colors$primary, "; margin-bottom: 15px;"),
+      paste0("Source Code: ", func_name, " (", pkg, " package)")
+    ),
+    
+    # Code display
+    htmltools::div(
+      style = paste0(
+        "border: 1px solid ", colors$border, "; ",
+        "border-radius: 6px; overflow: hidden; ",
+        "max-height: 400px; overflow-y: auto;"
+      ),
+      html_code
+    ),
+    
+    # Usage note
+    htmltools::div(
+      style = paste0(
+        "margin-top: 15px; padding: 10px; ",
+        "background-color: ", colors$secondaryBg, "; ",
+        "border-radius: 4px; font-size: 14px; ",
+        "color: ", colors$secondaryText, ";"
+      ),
+      htmltools::p(
+        htmltools::strong("Note: "),
+        "This code may be simplified or adapted. Refer to package documentation for the complete implementation."
+      )
+    )
+  )
+  
+  return(container)
+}
+
+#' Get function source code
+#' @param func_name Function name
+#' @param pkg Package name
+#' @param args_str Arguments string for placeholder
+#' @return Character string of function source code
+#' @keywords internal
+get_function_source <- function(func_name, pkg, args_str) {
+  # Try to get the actual function source
+  func_source <- tryCatch({
+    # Handle special cases for base/internal functions
+    if (pkg %in% c("base", "utils", "stats", "graphics")) {
+      # Check if it's a primitive function
+      f <- get(func_name, envir = asNamespace(pkg))
+      if (is.primitive(f)) {
+        return(paste0("function(", args_str, ") {\n  # This is a primitive function\n  # in package ", pkg, "\n  # Source code not available\n}"))
+      }
+    }
+    
+    # Try to get source code
+    if (requireNamespace(pkg, quietly = TRUE)) {
+      # Get the function from the package
+      f <- get(func_name, envir = asNamespace(pkg))
+      
+      # For S3/S4 methods, follow the actual implementation
+      if (inherits(f, "standardGeneric")) {
+        return(paste0("function(", args_str, ") {\n  # This is an S4 generic function\n  # in package ", pkg, "\n  # Source code varies by method\n}"))
+      }
+      
+      # Get the source code
+      src <- deparse(f)
+      if (length(src) > 0) {
+        return(paste(src, collapse = "\n"))
+      }
+    }
+    
+    return(NULL)
+  }, error = function(e) {
+    return(NULL)
+  })
+  
+  return(func_source)
+}
+
+# ASCII fallback functions
+generate_ascii_diagram <- function(func_name, metadata, theme = "light") {
+  message("Using ASCII fallback for function diagram")
+  
+  args <- metadata$args %||% character(0)
+  pkg <- metadata$package %||% "Unknown"
+  returns <- metadata$returns %||% "Result"
+  
+  # Create a simple ASCII diagram
+  padding <- max(nchar(args), nchar(returns))
+  
+  # Input section
+  ascii <- paste0(
+    "Function: ", func_name, " (", pkg, ")\n"
+  )
+  
+  ascii <- paste0(
+    ascii,
+    "┌", paste(rep("─", padding + 8), collapse = ""), "┐\n"
+  )
+  
+  # Add arguments
+  for (arg in args) {
+    ascii <- paste0(
+      ascii,
+      "│ Input: ", arg, paste(rep(" ", padding - nchar(arg)), collapse = ""), " │\n"
+    )
+  }
+  
+  # Function box
+  ascii <- paste0(
+    ascii,
+    "└", paste(rep("─", padding + 8), collapse = ""), "┘\n",
+    "        ↓\n",
+    "┌", paste(rep("─", padding + 8), collapse = ""), "┐\n",
+    "│ ", func_name, paste(rep(" ", padding + 8 - nchar(func_name) - 1), collapse = ""), "│\n",
+    "└", paste(rep("─", padding + 8), collapse = ""), "┘\n",
+    "        ↓\n",
+    "┌", paste(rep("─", padding + 8), collapse = ""), "┐\n",
+    "│ Output: ", returns, paste(rep(" ", padding - nchar(returns)), collapse = ""), " │\n",
+    "└", paste(rep("─", padding + 8), collapse = ""), "┘"
+  )
+  
+  # Create HTML with theme-appropriate styling
+  colors <- get_theme_colors(theme)
+  pre_element <- htmltools::tags$pre(
+    style = paste0(
+      "background-color: ", colors$codeBackground, "; ",
+      "color: ", colors$codeText, "; ",
+      "padding: 15px; border-radius: 4px; overflow-x: auto; ",
+      "font-family: 'Consolas', 'Monaco', monospace; line-height: 1.2;"
+    ),
+    ascii
+  )
+  
+  return(pre_element)
+}
+
+generate_ascii_data_flow <- function(func_name, metadata, theme = "light") {
+  message("Using ASCII fallback for data flow diagram")
+  
+  ascii <- paste0(
+    "┌───────────┐     ┌───────────┐     ┌───────────┐\n",
+    "│ Input Data│────>│ ", sprintf("%-9s", paste0(func_name, "()")), "│────>│ Output Data│\n",
+    "└───────────┘     └───────────┘     └───────────┘"
+  )
+  
+  # Create HTML with theme-appropriate styling
+  colors <- get_theme_colors(theme)
+  pre_element <- htmltools::tags$pre(
+    style = paste0(
+      "background-color: ", colors$codeBackground, "; ",
+      "color: ", colors$codeText, "; ",
+      "padding: 15px; border-radius: 4px; overflow-x: auto; ",
+      "font-family: 'Consolas', 'Monaco', monospace; line-height: 1.2;"
+    ),
+    ascii
+  )
+  
+  return(pre_element)
+}
+
+generate_function_network_ascii <- function(func_name, metadata, theme = "light") {
+  message("Using ASCII fallback for function network")
+  
+  ascii <- paste0(
+    "         ┌───────────────┐\n",
+    "         │ ", sprintf("%-13s", func_name), "│\n",
+    "         └───────┬───────┘\n",
+    "          ┌──────┴───────┐\n",
+    "          │              │\n",
+    "┌─────────▼──────┐ ┌─────▼──────────┐\n",
+    "│ Related Func 1 │ │ Related Func 2 │\n",
+    "└────────────────┘ └────────────────┘"
+  )
+  
+  # Create HTML with theme-appropriate styling
+  colors <- get_theme_colors(theme)
+  pre_element <- htmltools::tags$pre(
+    style = paste0(
+      "background-color: ", colors$codeBackground, "; ",
+      "color: ", colors$codeText, "; ",
+      "padding: 15px; border-radius: 4px; overflow-x: auto; ",
+      "font-family: 'Consolas', 'Monaco', monospace; line-height: 1.2;"
+    ),
+    ascii
+  )
+  
+  return(pre_element)
 }
