@@ -471,24 +471,54 @@ get_theme_colors <- function(theme) {
 #' @return HTML representation of the visualization
 #' @export
 load_visualization_tab <- function(func_name, metadata, vis_type, theme = "light") {
+  # Debugging
+  message(paste0("load_visualization_tab called for ", func_name, " type: ", vis_type))
+  
+  # Helper function for creating error messages
+  create_error_message <- function(message, theme) {
+    colors <- get_theme_colors(theme)
+    return(htmltools::doRenderTags(htmltools::tags$div(
+      class = "tldrAI-error",
+      style = paste0("color: ", if(theme == "dark") "#FF6B6B" else "#D32F2F", "; text-align: center; padding: 20px;"),
+      htmltools::tags$p(
+        style = "font-size: 16px; margin-bottom: 10px;",
+        paste0("Visualization error: ", message)
+      ),
+      htmltools::tags$p(
+        "Using fallback visualization for now."
+      )
+    )))
+  }
+  
   # Get theme colors
   colors <- get_theme_colors(theme)
   
   # Select the appropriate visualization function based on type
   visualization <- NULL
   
-  if (vis_type == "diagram") {
-    visualization <- generate_function_diagram_panel(func_name, metadata, theme)
-  } else if (vis_type == "data_flow") {
-    visualization <- generate_data_transformation_panel(func_name, metadata, theme = theme)
-  } else if (vis_type == "function_network") {
-    visualization <- generate_function_network_panel(func_name, metadata, theme)
-  } else if (vis_type == "code_highlight") {
-    visualization <- generate_code_highlight_panel(func_name, metadata, theme)
-  }
+  tryCatch({
+    if (vis_type == "diagram") {
+      message("Generating function diagram...")
+      visualization <- generate_function_diagram_panel(func_name, metadata, theme)
+    } else if (vis_type == "data_flow") {
+      message("Generating data flow visualization...")
+      visualization <- generate_data_transformation_panel(func_name, metadata, theme = theme)
+    } else if (vis_type == "function_network") {
+      message("Generating function network...")
+      visualization <- generate_function_network_panel(func_name, metadata, theme)
+    } else if (vis_type == "code_highlight") {
+      message("Generating code highlight...")
+      visualization <- generate_code_highlight_panel(func_name, metadata, theme)
+    }
+    message("Visualization generated successfully")
+  }, error = function(e) {
+    message(paste0("Error generating visualization: ", e$message))
+    visualization <- NULL
+  })
   
   # Convert visualization to HTML
   if (is.null(visualization)) {
+    message("Visualization is NULL, returning error message")
     return(htmltools::doRenderTags(htmltools::tags$div(
       class = "tldrAI-error",
       style = paste0("color: ", if(theme == "dark") "#FF6B6B" else "#D32F2F", "; text-align: center; padding: 20px;"),
@@ -503,39 +533,85 @@ load_visualization_tab <- function(func_name, metadata, vis_type, theme = "light
   }
   
   # Handle different visualization types
+  message(paste0("Visualization class: ", class(visualization)[1]))
+  
   if (inherits(visualization, "htmlwidget")) {
+    message("Processing htmlwidget...")
     # For htmlwidgets (like DiagrammeR, visNetwork), we need special handling
-    widget_html <- htmlwidgets::saveWidget(
-      visualization, 
-      file = tempfile(fileext = ".html"), 
-      selfcontained = TRUE
-    )
+    temp_file <- tempfile(fileext = ".html")
+    message(paste0("Saving widget to temporary file: ", temp_file))
     
-    # Extract the widget contents (this is a workaround but necessary)
-    # We need to extract the HTML content from the saved widget file
-    widget_content <- readLines(widget_html, warn = FALSE)
-    widget_content <- paste(widget_content, collapse = "\n")
+    # Try/catch for saveWidget which can sometimes fail
+    tryCatch({
+      htmlwidgets::saveWidget(
+        visualization, 
+        file = temp_file, 
+        selfcontained = TRUE
+      )
+      
+      # Check if file exists and has content
+      if (!file.exists(temp_file)) {
+        message("Error: Saved widget file does not exist")
+        return(create_error_message("Widget save failed", theme))
+      }
+      
+      file_size <- file.info(temp_file)$size
+      message(paste0("Widget file saved, size: ", file_size, " bytes"))
+      
+      if (file_size < 100) {
+        message("Error: Widget file is too small, likely failed to save properly")
+        return(create_error_message("Widget save failed - file too small", theme))
+      }
+      
+      # Extract the widget contents (this is a workaround but necessary)
+      # We need to extract the HTML content from the saved widget file
+      widget_content <- readLines(temp_file, warn = FALSE)
+      widget_content <- paste(widget_content, collapse = "\n")
+      
+      # Extract just the content portion we need
+      widget_content <- gsub(".*<body>", "", widget_content)
+      widget_content <- gsub("</body>.*", "", widget_content)
+      
+      if (nchar(widget_content) < 50) {
+        message("Error: Extracted widget content is too small")
+        return(create_error_message("Widget content extraction failed", theme))
+      }
+      
+      message(paste0("Widget content extracted, length: ", nchar(widget_content), " chars"))
+      return(widget_content)
+      
+    }, error = function(e) {
+      message(paste0("Error saving widget: ", e$message))
+      return(create_error_message(paste0("Widget error: ", e$message), theme))
+    })
     
-    # Extract just the content portion we need
-    widget_content <- gsub(".*<body>", "", widget_content)
-    widget_content <- gsub("</body>.*", "", widget_content)
-    
-    return(widget_content)
   } else if (inherits(visualization, "grViz") || inherits(visualization, "DiagrammeR")) {
-    # Convert DiagrammeR visualization to HTML
-    widget_html <- htmlwidgets::saveWidget(
-      visualization, 
-      file = tempfile(fileext = ".html"), 
-      selfcontained = TRUE
-    )
-    widget_content <- readLines(widget_html, warn = FALSE)
-    widget_content <- paste(widget_content, collapse = "\n")
-    widget_content <- gsub(".*<body>", "", widget_content)
-    widget_content <- gsub("</body>.*", "", widget_content)
-    return(widget_content)
+    message("Processing DiagrammeR/grViz widget...")
+    # Convert DiagrammeR visualization to HTML - use fallback if it fails
+    temp_file <- tempfile(fileext = ".html")
+    tryCatch({
+      htmlwidgets::saveWidget(
+        visualization, 
+        file = temp_file, 
+        selfcontained = TRUE
+      )
+      widget_content <- readLines(temp_file, warn = FALSE)
+      widget_content <- paste(widget_content, collapse = "\n")
+      widget_content <- gsub(".*<body>", "", widget_content)
+      widget_content <- gsub("</body>.*", "", widget_content)
+      message("DiagrammeR content extracted successfully")
+      return(widget_content)
+    }, error = function(e) {
+      message(paste0("Error with DiagrammeR widget: ", e$message))
+      # Use ASCII fallback
+      return(htmltools::doRenderTags(generate_ascii_diagram(func_name, metadata, theme)))
+    })
   } else if (inherits(visualization, "shiny.tag") || inherits(visualization, "html")) {
+    message("Processing HTML content...")
     # HTML content
-    return(htmltools::doRenderTags(visualization))
+    html_content <- htmltools::doRenderTags(visualization)
+    message(paste0("HTML content rendered, length: ", nchar(html_content), " chars"))
+    return(html_content)
   } else if (is.character(visualization)) {
     # ASCII fallback - convert to pre-formatted text
     return(htmltools::doRenderTags(htmltools::tags$pre(

@@ -120,8 +120,13 @@ function loadVisualization(el, funcName, metadata, visType) {
   // Get the visualization container
   const vizContainer = el.querySelector(`#viz-${visType}`);
   
+  // Debug information
+  console.log(`Loading visualization for ${funcName}, type: ${visType}`);
+  console.log(`Container: #viz-${visType}`, vizContainer);
+  
   // Check if already loaded
   if (vizContainer.getAttribute('data-loaded') === 'true') {
+    console.log("Visualization already loaded, skipping");
     return;
   }
   
@@ -129,10 +134,12 @@ function loadVisualization(el, funcName, metadata, visType) {
   const loadingDiv = el.querySelector(`#panel-${visType} .tldrAI-loading`);
   if (loadingDiv) {
     loadingDiv.style.display = 'flex';
+    console.log("Showing loading indicator", loadingDiv);
   }
   
   // Get theme from container (light or dark)
   const isDarkTheme = document.querySelector('.tldrAI-multimodal-container')?.style.backgroundColor === '#1E1E1E';
+  console.log("Theme detection:", isDarkTheme ? "dark" : "light");
   
   // Colors based on theme
   const colors = {
@@ -310,6 +317,7 @@ selected_names <- <span style="color: ${codeColors.keyword};">filter</span>(data
   try {
     // Using R's callback mechanism to generate visualization
     const callback = 'load_visualization_tab';
+    console.log("Using R callback:", callback);
     
     // Prepare parameters
     const params = {
@@ -318,10 +326,12 @@ selected_names <- <span style="color: ${codeColors.keyword};">filter</span>(data
       vis_type: visType,
       theme: isDarkTheme ? 'dark' : 'light'
     };
+    console.log("Visualization parameters:", JSON.stringify(params));
     
     // Call to R function
     if (typeof window.Shiny !== 'undefined') {
       // If in Shiny environment
+      console.log("Detected Shiny environment, using Shiny.setInputValue");
       Shiny.setInputValue('tldrAI_multimodal_vizRequest', {
         func_name: funcName,
         metadata: metadata,
@@ -342,13 +352,38 @@ selected_names <- <span style="color: ${codeColors.keyword};">filter</span>(data
       }, 3000); // 3 second timeout
     } else {
       // Direct HTMLWidgets call (for non-Shiny use)
+      console.log("Using direct HTMLWidgets call");
+      
+      // Try to use HTMLWidgets, but have a quick fallback timeout
+      console.log("Attempting to call R visualization function with timeout");
+      
+      // Set a timeout for fallback
+      let timeoutId = setTimeout(function() {
+        console.log("R visualization taking too long, using JavaScript fallback");
+        if (!vizContainer.hasAttribute('data-loaded')) {
+          vizContainer.innerHTML = fallbackViz;
+          vizContainer.setAttribute('data-loaded', 'true');
+          if (loadingDiv) loadingDiv.style.display = 'none';
+        }
+      }, 2000); // 2 second timeout
+      
+      // Try to call the R function
       HTMLWidgets.evaluateStringMember(callback, params, function(err, visualization) {
+        // Clear the timeout since we got a response
+        clearTimeout(timeoutId);
+        
+        console.log("HTMLWidgets callback completed");
         if (err) {
           console.error("Error loading visualization:", err);
           // Use fallback on error
           vizContainer.innerHTML = fallbackViz;
           vizContainer.setAttribute('data-loaded', 'true');
+        } else if (!visualization || visualization.trim() === '') {
+          console.error("Empty visualization returned from R");
+          vizContainer.innerHTML = fallbackViz;
+          vizContainer.setAttribute('data-loaded', 'true');
         } else {
+          console.log("Got visualization from R:", visualization ? visualization.substring(0, 100) + "..." : "empty");
           // Insert visualization content
           vizContainer.innerHTML = visualization;
           vizContainer.setAttribute('data-loaded', 'true');
